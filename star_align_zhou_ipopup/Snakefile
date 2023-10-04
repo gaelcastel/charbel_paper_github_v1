@@ -1,0 +1,212 @@
+import glob, os, sys, json, shutil
+
+WORKING_DIR = os.path.dirname(workflow.snakefile)
+if config=={}:
+	print("Default config file loaded, from " + WORKING_DIR + "/config.json")
+	configfile: WORKING_DIR+"/config.json"
+
+## creation of the logs subdirectory
+if not os.path.exists(WORKING_DIR+"/log"):
+	os.mkdir(WORKING_DIR+"/log")
+
+#is the workflow running in paired mode ?
+PRELOAD_GENOME = config["PRELOAD_GENOME"]
+
+FASTQ_FOLDER = config["FASTQ_PATH"]
+## test of the path provided in the config.json file
+if not os.path.exists(FASTQ_FOLDER):
+	print("The directory "+FASTQ_FOLDER+" doesn't exist. Check the field FASTQ_PATH into the config.json file.")
+	sys.exit(0)
+else:
+	## If the path ends by /, the / is suppressed
+	if ( FASTQ_FOLDER[-1:] == "/" ):
+		FASTQ_FOLDER =FASTQ_FOLDER[:-1]
+
+INPUT_FASTQS = glob.glob(FASTQ_FOLDER+'/*.fastq.gz')
+
+MULTIPLEXsplitted = [os.path.basename(f).split(".") for f in INPUT_FASTQS]
+MULTIPLEX=[] 
+
+#remove .fastq.gz to get multiplex names
+for s in MULTIPLEXsplitted:
+	MULTIPLEX.append(".".join(s[0:-2]))
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+## suppress the .R1. and .R2. elements for paired-end fastq files for the alignement processus in MULTIPLEX
+MULTIPLEX = {itemR2 for itemR2 in MULTIPLEX if (config["PAIR_END_FILE_PATTERN"]+"2") not in itemR2}
+MULTIPLEX = {itemR1.replace((config["PAIR_END_FILE_PATTERN"]+"1"),'') for itemR1 in MULTIPLEX}
+
+
+#OVERHANG calculation
+if config["READ_LENGTH"]<1:
+	with os.popen("gunzip -c " + INPUT_FASTQS[0] + " | sed -n '2p'","r") as inputRead:
+		OVERHANG = len(inputRead.readline()) - 2
+else:
+	OVERHANG = int(config["READ_LENGTH"]) - 1
+
+
+PAIR_SUFFIX = [config["PAIR_END_FILE_PATTERN"]+"1",config["PAIR_END_FILE_PATTERN"]+"2"]
+STAR_INDEX_DIR = os.path.dirname(config["FASTA_REFERENCE"])+"/STAR_INDEX"
+
+if os.path.isfile(OUTDIR+"/log/genomeIsLoaded"): os.remove(OUTDIR+"/log/genomeIsLoaded")
+
+STAR_ARGS = ""
+for option in config["STAR_ARGS"]: STAR_ARGS += "--" + option+" " + str(config["STAR_ARGS"][option]) + " "
+
+WHITE_LIST_PATH=config["WHITE_LIST_PATH"]
+if os.path.isdir(WHITE_LIST_PATH):
+	whitelistPerFile=True
+	if (WHITE_LIST_PATH[-1:] == "/" ):
+		WHITE_LIST_PATH = WHITE_LIST_PATH[:-1]
+else: whitelistPerFile=False
+
+STAR_FEATURES=config["STAR_FEATURES"]
+STAR_SOLO_FILES_GENE=["features.tsv","barcodes.tsv","matrix.mtx"]
+STAR_SOLO_FILES_VELOCYTO=["features.tsv","barcodes.tsv","spliced.mtx","unspliced.mtx","ambiguous.mtx"]
+STAR_LOAD_BEHAVIOR=""
+
+##############
+rule all: 
+	input: OUTDIR+"/results/multiqc_report.html"
+
+# rule STAR_INDEX:
+# 	input:
+# 		gtf = config["GTF_REFERENCE"],
+# 		fasta = config["FASTA_REFERENCE"]
+# 	output: directory(STAR_INDEX_DIR)
+# 	params:
+# 		cpu=config["STAR_GENOME_THREADS"],
+# 		ram=int(config["GENOME_INDEX_RAM"]),
+# 	log:
+# 		out=OUTDIR+"/log/STAR_INDEX.out",
+# 		err=OUTDIR+"/log/STAR_INDEX.err",
+# 		starLog=OUTDIR+"/log/STAR_INDEX.Log.out"
+# 	shell: """
+# 	mkdir {output}
+# 	STAR --runThreadN {params.cpu} --runMode genomeGenerate --genomeDir {output} --genomeFastaFiles {input.fasta} \\
+# 	--outFileNamePrefix {OUTDIR}/log/STAR_INDEX. \\
+# 	--sjdbGTFfile {input.gtf} --sjdbOverhang {OVERHANG}  --limitGenomeGenerateRAM {params.ram} 1> {log.out} 2> {log.err}
+# 	"""
+
+# rule FASTQC:
+# 	input: fastq_path=config["FASTQ_PATH"]+"/{multiplex}"+PAIR_SUFFIX[0]+".fastq.gz"
+# 	output: multiext(OUTDIR+"/fastQC/{multiplex}"+PAIR_SUFFIX[0]+"_fastqc",".zip",".html")
+# 	params:
+# 		cpu = 1
+# 	log:
+# 		out=OUTDIR+"/log/FASTQC_{multiplex}.out",
+# 		err=OUTDIR+"/log/FASTQC_{multiplex}.err"
+# 	shell: """
+# 	fastqc -o '{OUTDIR}/fastQC' {input.fastq_path} 1> {log.out} 2> {log.err}
+# 	"""
+
+if PRELOAD_GENOME:
+	STAR_LOAD_BEHAVIOR = "--genomeLoad LoadAndKeep"
+	genomeIsLoadedFile = temp(OUTDIR+"/log/genomeIsLoaded")
+
+	rule STAR_LOAD_GENOME:
+		input: 
+			starIndexDir=STAR_INDEX_DIR,
+			after_index=OUTDIR+"/log/STAR_INDEX.out"
+		output:
+			OUTDIR+"/log/genomeIsLoaded"
+		log:
+			out=OUTDIR+"/log/STAR_LOAD_GENOME.out",
+			err=OUTDIR+"/log/STAR_LOAD_GENOME.err",
+			starLog=OUTDIR+"/log/STAR_LOAD_GENOME.Log.out",
+			starProgressLog=OUTDIR+"/log/STAR_LOAD_GENOME.progress.out"
+		params: cpu=config["STAR_GENOME_THREADS"]
+		shell: """
+		STAR --genomeLoad Remove  --genomeDir {input.starIndexDir} --runThreadN {params.cpu} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_LOAD_GENOME. 1> {log.out} 2> {log.err}
+		
+		STAR --genomeLoad LoadAndExit  --runThreadN {params.cpu}  \\
+		--genomeDir {input.starIndexDir} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_LOAD_GENOME.  1> {log.out} 2> {log.err}
+		
+		touch {output}
+		rm {OUTDIR}/log/STAR_LOAD_GENOME.Aligned.out.sam
+		"""
+
+else:
+	STAR_LOAD_BEHAVIOR=""
+	genomeIsLoadedFile=[]
+
+def giveWhiteList(wildcards):
+	if whitelistPerFile: return WHITE_LIST_PATH+"/"+wildcards.multiplex+".txt"
+	else: return WHITE_LIST_PATH
+
+rule STAR_ALIGN:
+        input:
+                fastq=expand(FASTQ_FOLDER+"/{{multiplex}}{pair}.fastq.gz",pair=PAIR_SUFFIX),
+                whitelist="/shared/projects/xci/zhou_2019/whitelist.txt",
+                starIndexDir=STAR_INDEX_DIR
+                # after_load=OUTDIR+"/log/genomeIsLoaded"
+        output:
+                OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Aligned.sortedByCoord.out.bam",
+                expand(OUTDIR+"/log/STAR_ALIGN_{{multiplex}}.STARSOLO.Solo.out/"+STAR_FEATURES[0]+"/raw/{soloFile_gene}", soloFile_gene=STAR_SOLO_FILES_GENE),
+                expand(OUTDIR+"/log/STAR_ALIGN_{{multiplex}}.STARSOLO.Solo.out/"+STAR_FEATURES[1]+"/raw/{soloFile_velocyto}", soloFile_velocyto=STAR_SOLO_FILES_VELOCYTO)
+        # log:
+        #         out=OUTDIR+"/log/STAR_ALIGN_{multiplex}.out",
+        #         err=OUTDIR+"/log/STAR_ALIGN_{multiplex}.err",
+        #         starLog=OUTDIR+"/log/STAR_ALIGN_{multiplex}.Log.out",
+        #         starProgressLog=OUTDIR+"/log/STAR_ALIGN_{multiplex}.progress.out"
+        params:
+                cpu = config["THREAD_PER_SAMPLE"],
+                ram_usage = "96GB",
+                soloType = config["STARSOLO_TYPE"]
+        shell: """
+        STAR --soloType {params.soloType} --soloCBwhitelist {input.whitelist} --soloFeatures {STAR_FEATURES}\\
+        --runThreadN {params.cpu} --genomeDir {input.starIndexDir} --readFilesCommand zcat --readFilesIn {input.fastq} \\
+        --outFileNamePrefix {OUTDIR}/log/STAR_ALIGN_{wildcards.multiplex}.STARSOLO. --outSAMtype BAM SortedByCoordinate \\
+        --outSAMattributes NH HI nM AS CR UR CB UB GX GN sS sQ sM \\
+        {STAR_ARGS} {STAR_LOAD_BEHAVIOR}
+        """
+
+# if preload_genome true, add this to star align : --limitBAMsortRAM {params.ram_usage}
+
+if PRELOAD_GENOME:
+	rule STAR_UNLOAD_GENOME:
+		input:
+			bams = expand(OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Aligned.sortedByCoord.out.bam",multiplex=MULTIPLEX),
+			genomeIsLoaded = OUTDIR+"/log/genomeIsLoaded"
+		log:
+			out=OUTDIR+"/log/STAR_UNLOAD_GENOME.out",
+			err=OUTDIR+"/log/STAR_UNLOAD_GENOME.err",
+			starLog=OUTDIR+"/log/STAR_UNLOAD_GENOME.Log.out",
+			starProgressLog=OUTDIR+"/log/STAR_UNLOAD_GENOME.progress.out"
+		params: cpu=config["STAR_GENOME_THREADS"]
+		shell: """
+		STAR --genomeLoad Remove  --runThreadN {params.cpu}  --genomeDir {input.starIndexDir} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_UNLOAD_GENOME.  1> {log.out} 2> {log.err}
+		"""
+
+# rule MOVE_FILES:
+# 	input:
+# 		bam=OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Aligned.sortedByCoord.out.bam",
+# 		solo=expand(OUTDIR+"/log/STAR_ALIGN_{{multiplex}}.STARSOLO.{feature}/raw/{soloFile}",feature=STAR_FEATURES,soloFile=STAR_SOLO_FILES)
+		
+# 	output:
+# 		bam=OUTDIR+"/BAM/{multiplex}.bam",
+# 		solo=expand(OUTDIR+"/{feature}/{{multiplex}}/{soloFile}",feature=STAR_FEATURES,soloFile=STAR_SOLO_FILES)
+# 	params: cpu = 1
+# 	run: 
+# 		shutil.move(input.bam, output.bam)
+# 		for i in range(len(input.solo)):
+# 			shutil.move(input.solo[i], output.solo[i])
+
+rule MULTIQC:
+	input: 
+		fastqc=expand(OUTDIR+"/fastQC/{multiplex}"+PAIR_SUFFIX[0]+"_fastqc{ext}", multiplex=MULTIPLEX,ext=[".zip",".html"]),
+		bams = expand(OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Aligned.sortedByCoord.out.bam",multiplex=MULTIPLEX),
+                solo_files_gene = expand(OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Solo.out/"+STAR_FEATURES[0]+"/raw/{soloFile_gene}", multiplex=MULTIPLEX, soloFile_gene=STAR_SOLO_FILES_GENE),
+                solo_files_velocyto = expand(OUTDIR+"/log/STAR_ALIGN_{multiplex}.STARSOLO.Solo.out/"+STAR_FEATURES[1]+"/raw/{soloFile_velocyto}", multiplex=MULTIPLEX, soloFile_velocyto=STAR_SOLO_FILES_VELOCYTO)                
+	output: OUTDIR+"/results/multiqc_report.html"
+	params:
+		outpath = OUTDIR + "/results",
+		cpu = 1
+	shell: """
+	multiqc -f -e general_stats -e tophat -e bowtie2 {OUTDIR} -o {params.outpath}
+	"""

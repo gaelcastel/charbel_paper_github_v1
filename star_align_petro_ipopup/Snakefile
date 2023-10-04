@@ -1,0 +1,213 @@
+import glob, os, sys, json, shutil
+
+WORKING_DIR = os.path.dirname(workflow.snakefile)
+if config=={}:
+	print("Default config file loaded, from " + WORKING_DIR + "/config.json")
+	configfile: WORKING_DIR+"/config.json"
+
+## creation of the logs subdirectory
+if not os.path.exists(WORKING_DIR+"/log"):
+	os.mkdir(WORKING_DIR+"/log")
+
+#is the workflow running in paired mode ?
+PRELOAD_GENOME = config["PRELOAD_GENOME"]
+
+FASTQ_FOLDER = config["FASTQ_PATH"]
+## test of the path provided in the config.json file
+if not os.path.exists(FASTQ_FOLDER):
+	print("The directory "+FASTQ_FOLDER+" doesn't exist. Check the field FASTQ_PATH into the config.json file.")
+	sys.exit(0)
+else:
+	## If the path ends by /, the / is suppressed
+	if ( FASTQ_FOLDER[-1:] == "/" ):
+		FASTQ_FOLDER =FASTQ_FOLDER[:-1]
+
+INPUT_FASTQS = glob.glob(FASTQ_FOLDER+'/*.fastq.gz')
+
+samplesplitted = [os.path.basename(f).split(".") for f in INPUT_FASTQS]
+sample=[] 
+
+#remove .fastq.gz to get sample names
+for s in samplesplitted:
+	sample.append(".".join(s[0:-2]))
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+
+#OVERHANG calculation
+if config["READ_LENGTH"]<1:
+	with os.popen("gunzip -c " + INPUT_FASTQS[0] + " | sed -n '2p'","r") as inputRead:
+		OVERHANG = len(inputRead.readline()) - 2
+else:
+	OVERHANG = int(config["READ_LENGTH"]) - 1
+
+STAR_INDEX_DIR = os.path.dirname(config["FASTA_REFERENCE"])+"/STAR_INDEX_petropoulos_2016"
+
+if os.path.isfile(OUTDIR+"/log/genomeIsLoaded"): os.remove(OUTDIR+"/log/genomeIsLoaded")
+
+STAR_FEATURES=config["STAR_FEATURES"]
+STAR_SOLO_FILES_GENE=["features.tsv","barcodes.tsv","matrix.mtx"]
+# STAR_SOLO_FILES_VELOCYTO=["features.tsv","barcodes.tsv","spliced.mtx","unspliced.mtx","ambiguous.mtx"]
+# --soloFeatures Velocyto is presently not compatible with --soloType SmartSeq ; If I want to do RNA velocity, do :RNA velocity was performed from BAM of samples that have passed all quality control in the final counts table. First, we used velocyto.
+# py using the command velocyto run, with the parameter–logic as ‘‘SmartSeq2,’’ and the parameter -m (RepeatMasker annotations)
+# as a GTF downloaded from the UCSC genome browser. The global GTF was the same that were used for the computation of
+# raw counts table. Resulting loom files were merged using loompy.combine from lompy python package. We used velocyto.R for
+# computing Velocity matrix. Loom files were read with the function read.loom.matrices. Then we separated spliced reads matrix, unspliced
+# reads matrix and spanning reads matrix. For each of the matrices gene filtering was performed with the function filter.genes.-
+# by.cluster.expression. The min.max.cluster.average parameters were set for the corresponding matrix as:
+# d spliced reads matrix: 5
+# d unspliced reads matrix: 1
+# d spanning reads matrix: 0.5
+# Then RNA velocity was estimated using gene.relative.velocity.estimates, with the following parameters: fit.quantile = 0.05, deltaT =
+# 1, kCells = 5.
+# PCA of Figures 3D and 3E were calculated with the function pca.velocity.plot.
+# RNA velocity vectors were projected on an isometric representation of the UMAP (Figures 3F, 3G, 5G, and 5H) with the function
+# show.velocity.on.embedding.cor. Only the cells from the Petrolopoulos et al. dataset are projected to avoid batch effects during the
+# computation of RNA velocities.
+# In the Figures 3F and 3G, the limit between the sector of early TE and EPI is the bisector of the angle formed by the cluster centroid
+# of EPI, B1 & B2 and early TE in the UMAP.
+# In the Figures 5G and 5H, the sector of the circular diagram was oriented to face the centroid of the PrE cluster from the centroid of
+# the EPI.PrE cluster.
+# meistermann_2021
+STAR_LOAD_BEHAVIOR=""
+
+##############
+rule all: 
+	input: OUTDIR+"/results/multiqc_report.html"
+
+# rule STAR_INDEX:
+# 	input:
+# 		gtf = config["GTF_REFERENCE"],
+# 		fasta = config["FASTA_REFERENCE"]
+# 	output: directory(STAR_INDEX_DIR)
+# 	params:
+# 		cpu=config["STAR_GENOME_THREADS"],
+# 		ram=int(config["GENOME_INDEX_RAM"]),
+# 	log:
+# 		out=OUTDIR+"/log/STAR_INDEX.out",
+# 		err=OUTDIR+"/log/STAR_INDEX.err",
+# 		starLog=OUTDIR+"/log/STAR_INDEX.Log.out"
+# 	shell: """
+# 	mkdir {output}
+# 	STAR --runThreadN {params.cpu} --runMode genomeGenerate --genomeDir {output} --genomeFastaFiles {input.fasta} \\
+# 	--outFileNamePrefix {OUTDIR}/log/STAR_INDEX. \\
+# 	--sjdbGTFfile {input.gtf} --sjdbOverhang {OVERHANG}  --limitGenomeGenerateRAM {params.ram} 1> {log.out} 2> {log.err}
+# 	"""
+
+if PRELOAD_GENOME:
+	STAR_LOAD_BEHAVIOR = "--genomeLoad LoadAndKeep"
+	genomeIsLoadedFile = temp(OUTDIR+"/log/genomeIsLoaded")
+
+	rule STAR_LOAD_GENOME:
+		input: 
+			starIndexDir=STAR_INDEX_DIR
+		output:
+			OUTDIR+"/log/genomeIsLoaded"
+		log:
+			out=OUTDIR+"/log/STAR_LOAD_GENOME.out",
+			err=OUTDIR+"/log/STAR_LOAD_GENOME.err",
+			starLog=OUTDIR+"/log/STAR_LOAD_GENOME.Log.out",
+			starProgressLog=OUTDIR+"/log/STAR_LOAD_GENOME.progress.out"
+		params: cpu=config["STAR_GENOME_THREADS"]
+		shell: """
+		STAR --genomeLoad Remove  --genomeDir {input.starIndexDir} --runThreadN {params.cpu} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_LOAD_GENOME. 1> {log.out} 2> {log.err}
+		
+		STAR --genomeLoad LoadAndExit  --runThreadN {params.cpu}  \\
+		--genomeDir {input.starIndexDir} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_LOAD_GENOME.  1> {log.out} 2> {log.err}
+		
+		touch {output}
+		rm {OUTDIR}/log/STAR_LOAD_GENOME.Aligned.out.sam
+		"""
+
+else:
+	STAR_LOAD_BEHAVIOR=""
+	genomeIsLoadedFile=[]
+
+rule STAR_ALIGN:
+        input:
+                fastq=FASTQ_FOLDER+"/{sample}.fastq.gz",
+                starIndexDir=STAR_INDEX_DIR
+        output:
+                OUTDIR+"/log/STAR_ALIGN_{sample}.STARSOLO.Aligned.sortedByCoord.out.bam",
+                expand(OUTDIR+"/log/STAR_ALIGN_{{sample}}.STARSOLO.Solo.out/"+STAR_FEATURES[0]+"/raw/{soloFile_gene}", soloFile_gene=STAR_SOLO_FILES_GENE)
+        priority: 1
+        # log:
+        #         out=OUTDIR+"/log/STAR_ALIGN_{sample}.out",
+        #         err=OUTDIR+"/log/STAR_ALIGN_{sample}.err",
+        #         starLog=OUTDIR+"/log/STAR_ALIGN_{sample}.Log.out",
+        #         starProgressLog=OUTDIR+"/log/STAR_ALIGN_{sample}.progress.out"
+        params:
+                cpu = config["THREAD_PER_SAMPLE"],
+                ram_usage = "80GB",
+                soloType = config["STARSOLO_TYPE"]
+        shell: """
+        STAR --soloType {params.soloType} --soloFeatures {STAR_FEATURES} \\
+        --runThreadN {params.cpu} --genomeDir {input.starIndexDir} --readFilesCommand zcat --readFilesIn {input.fastq} \\
+        --soloStrand Unstranded \\
+        --soloUMIdedup NoDedup \\
+        --outFileNamePrefix {OUTDIR}/log/STAR_ALIGN_{wildcards.sample}.STARSOLO. --outSAMtype BAM SortedByCoordinate \\
+        --outSAMattrRGline ID:{wildcards.sample} \\
+        {STAR_LOAD_BEHAVIOR}
+        """
+
+rule FASTQC:
+	input:
+		fastq_path=config["FASTQ_PATH"]+"/{sample}.fastq.gz"
+	output: multiext(OUTDIR+"/fastQC/{sample}_fastqc",".zip",".html")
+	params:
+		cpu = 1
+	log:
+		out=OUTDIR+"/log/FASTQC_{sample}.out",
+		err=OUTDIR+"/log/FASTQC_{sample}.err"
+	shell: """
+	fastqc -o '{OUTDIR}/fastQC' {input.fastq_path} 1> {log.out} 2> {log.err}
+	"""
+
+# if preload_genome true, add this to star align : --limitBAMsortRAM {params.ram_usage}
+# --soloUMIdedup NoDedup : because single-end reads don't have UMI
+
+if PRELOAD_GENOME:
+	rule STAR_UNLOAD_GENOME:
+		input:
+			bams = expand(OUTDIR+"/log/STAR_ALIGN_{sample}.STARSOLO.Aligned.sortedByCoord.out.bam",sample=sample),
+			genomeIsLoaded = OUTDIR+"/log/genomeIsLoaded"
+		log:
+			out=OUTDIR+"/log/STAR_UNLOAD_GENOME.out",
+			err=OUTDIR+"/log/STAR_UNLOAD_GENOME.err",
+			starLog=OUTDIR+"/log/STAR_UNLOAD_GENOME.Log.out",
+			starProgressLog=OUTDIR+"/log/STAR_UNLOAD_GENOME.progress.out"
+		params: cpu=config["STAR_GENOME_THREADS"]
+		shell: """
+		STAR --genomeLoad Remove  --runThreadN {params.cpu}  --genomeDir {input.starIndexDir} \\
+		--outFileNamePrefix {OUTDIR}/log/STAR_UNLOAD_GENOME.  1> {log.out} 2> {log.err}
+		"""
+
+# rule MOVE_FILES:
+# 	input:
+# 		bam=OUTDIR+"/log/STAR_ALIGN_{sample}.STARSOLO.Aligned.sortedByCoord.out.bam",
+# 		solo=expand(OUTDIR+"/log/STAR_ALIGN_{{sample}}.STARSOLO.{feature}/raw/{soloFile}",feature=STAR_FEATURES,soloFile=STAR_SOLO_FILES)
+		
+# 	output:
+# 		bam=OUTDIR+"/BAM/{sample}.bam",
+# 		solo=expand(OUTDIR+"/{feature}/{{sample}}/{soloFile}",feature=STAR_FEATURES,soloFile=STAR_SOLO_FILES)
+# 	params: cpu = 1
+# 	run: 
+# 		shutil.move(input.bam, output.bam)
+# 		for i in range(len(input.solo)):
+# 			shutil.move(input.solo[i], output.solo[i])
+
+rule MULTIQC:
+	input: 
+		fastqc=expand(OUTDIR+"/fastQC/{sample}_fastqc{ext}", sample=sample,ext=[".zip",".html"]),
+		bams = expand(OUTDIR+"/log/STAR_ALIGN_{sample}.STARSOLO.Aligned.sortedByCoord.out.bam",sample=sample),
+                solo_files_gene = expand(OUTDIR+"/log/STAR_ALIGN_{sample}.STARSOLO.Solo.out/"+STAR_FEATURES[0]+"/raw/{soloFile_gene}", sample=sample, soloFile_gene=STAR_SOLO_FILES_GENE)
+	output: OUTDIR+"/results/multiqc_report.html"
+	params:
+		outpath = OUTDIR + "/results",
+		cpu = 1
+	shell: """
+	multiqc -f -e general_stats -e tophat -e bowtie2 {OUTDIR} -o {params.outpath}
+	"""

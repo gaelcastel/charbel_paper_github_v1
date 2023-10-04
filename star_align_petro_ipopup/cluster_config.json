@@ -1,0 +1,29 @@
+{
+    "__default__" :
+    {
+        "cpu" : 1,
+        "partition" : "ipop-up",
+        "ram" : "6GB"
+    },
+
+    "STAR_LOAD_GENOME" :
+    {
+        "cpu" : 30,
+        "ram" : "192GB",
+        "partition" : "ipop-up"
+    },
+
+    "STAR_UNLOAD_GENOME" :
+    {
+        "cpu" : 30,
+        "ram" : "192GB",
+        "partition" : "ipop-up"
+    },
+
+    "STAR_ALIGN" :
+    {
+        "cpu" : 12,
+        "ram" : "80GB",
+        "partition" : "ipop-up"
+    }
+}

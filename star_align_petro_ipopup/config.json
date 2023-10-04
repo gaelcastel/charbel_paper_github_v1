@@ -1,0 +1,18 @@
+{
+	"FASTQ_TYPE": "singleEnd",
+	"PRELOAD_GENOME": false,
+	"READ_LENGTH" : 0,
+	"STAR_GENOME_THREADS": 30,
+	"THREAD_PER_SAMPLE": 12,
+	"FASTA_REFERENCE": "/shared/projects/xci/ReferenceGenomes/GRCh38/HS.GRCh38.fa",
+	"GTF_REFERENCE": "/shared/projects/xci/ReferenceGenomes/GRCh38/GTF/Homo_sapiens.GRCh38.90.gtf",
+	"FASTQ_PATH": "/shared/projects/xci/petropoulos_2016/fastq",
+	"OUTPUT_PATH": "/shared/projects/xci/petropoulos_2016/aligned_with_star",
+	"GENOME_INDEX_RAM":168632718037,
+	"CUTADAPT_MIN_READ_LEN":10,
+	"FEATURE_TYPE":"exon",
+	"FEATURE_ID":"gene_name",
+	
+	"STARSOLO_TYPE":"SmartSeq",
+	"STAR_FEATURES": ["Gene"]
+}
