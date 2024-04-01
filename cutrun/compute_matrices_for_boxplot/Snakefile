@@ -1,0 +1,47 @@
+
+configfile: "config.json"
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+rule all:
+    input:
+        matrix=expand(OUTDIR+"/matrices_boxplot/{mark}_up_constant_genes_tss_refpoint_5kb.matrix.gz",mark=["H2AK119Ub","H3K27ac","H3K27me3","H3K4me1","H3K4me3","H3K9me3","IgG"])
+
+# NB: I did not include CTCF here, as it was not tested in primed 
+
+
+
+rule compute_matrix_tss_refpoint_5kb:
+    input:
+        bw_primed=OUTDIR+"/primed_cutrun/bpm/merged/Primed_{mark}_merged_bpm.bw",
+        bw_naive_ctl=OUTDIR+"/naive_cutrun/bpm/merged/all/PXGL_ctl_mark_{mark}_merged_bpm.bw",
+        bw_naive_ttt=OUTDIR+"/naive_cutrun/bpm/merged/all/PXGL_ttt_mark_{mark}_merged_bpm.bw"
+ 
+    output:
+        matrix=OUTDIR+"/matrices_boxplot/{mark}_up_constant_genes_tss_refpoint_5kb.matrix.gz"
+    
+    log:
+        out_log="{mark}_compute_matrix_up_constant_genes_tss_refpoint_5kb.out"
+
+    params:
+        range_bp=5000,
+        binsize=50
+    threads: 16
+
+    shell:"""
+    computeMatrix \\
+            reference-point \\
+            --referencePoint "TSS" \\
+            -S {input.bw_primed} {input.bw_naive_ctl} {input.bw_naive_ttt} \\
+            -R constant.gtf up.gtf \\
+            --beforeRegionStartLength {params.range_bp} \\
+            --afterRegionStartLength {params.range_bp} \\
+            -p {threads} \\
+            --binSize {params.binsize} \\
+            --missingDataAsZero --skipZeros \\
+            --outFileName {output.matrix} \\
+            2> {log.out_log}
+    """
+# computeMatrix will properly handle strand information if your BED file includes that column (GTF files always include strand).
+# For the --metagene option to work, you will need either a BED12 (including columns 11 and 12) or a GTF file as input. GFF is NOT the same as GTF format!

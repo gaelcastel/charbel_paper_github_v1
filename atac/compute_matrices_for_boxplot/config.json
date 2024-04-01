@@ -1,0 +1,16 @@
+{
+	"OUTPUT_PATH": "/shared/projects/xci/homo_sapiens/stem_cells/charbel/paper/atac",
+
+	"SAMPLES":{
+
+		"control_R1":"control_R1",
+		"control_R2":"control_R2",
+		"control_R3":"control_R3",
+		"treatment_R1":"treatment_R1",
+		"treatment_R2":"treatment_R2",
+		"treatment_R3":"treatment_R3"
+
+	}
+
+}
+

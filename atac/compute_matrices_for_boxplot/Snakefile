@@ -1,0 +1,42 @@
+configfile: "config.json"
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+rule all:
+    input:
+        matrix=OUTDIR+"/matrices_boxplot/atac_up_constant_genes_tss_refpoint_5kb.matrix.gz"
+
+
+
+rule compute_matrix_tss_refpoint_5kb:
+    input:
+        bw_atac=expand("/shared/projects/xci/homo_sapiens/stem_cells/charbel/2022/atac_seq/naive/results/bwa/mergedLibrary/bigwig/{samples}.mLb.clN.bigWig",samples=config["SAMPLES"])
+ 
+    output:
+        matrix=OUTDIR+"/matrices_boxplot/atac_up_constant_genes_tss_refpoint_5kb.matrix.gz"
+    
+    log:
+        out_log="atac_compute_matrix_up_constant_genes_tss_refpoint_5kb.out"
+
+    params:
+        range_bp=5000,
+        binsize=50
+    threads: 16
+
+    shell:"""
+    computeMatrix \\
+            reference-point \\
+            --referencePoint "TSS" \\
+            -S {input.bw_atac} \\
+            -R constant.gtf up.gtf \\
+            --beforeRegionStartLength {params.range_bp} \\
+            --afterRegionStartLength {params.range_bp} \\
+            -p {threads} \\
+            --binSize {params.binsize} \\
+            --missingDataAsZero --skipZeros \\
+            --outFileName {output.matrix} \\
+            2> {log.out_log}
+    """
+# computeMatrix will properly handle strand information if your BED file includes that column (GTF files always include strand).
+# For the --metagene option to work, you will need either a BED12 (including columns 11 and 12) or a GTF file as input. GFF is NOT the same as GTF format!

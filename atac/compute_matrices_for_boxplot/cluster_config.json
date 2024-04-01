@@ -1,0 +1,15 @@
+{
+    "__default__" :
+    {
+        "cpu" : 6,
+        "ram" : "32GB",
+        "partition" : "ipop-up"
+    },
+
+    "compute_matrix_tss_refpoint_5kb" :
+    {
+        "cpu" : 16,
+        "ram" : "88GB",
+        "partition" : "ipop-up"
+    }
+}
