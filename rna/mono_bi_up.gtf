@@ -1,0 +1,16 @@
+X	ensembl_havana	gene	31097677	33339441	.	-	.	gene_id ENSG00000198947; gene_version 15; gene_name DMD; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	49922615	50099235	.	+	.	gene_id ENSG00000171365; gene_version 15; gene_name CLCN5; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	51743431	51746232	.	+	.	gene_id ENSG00000189369; gene_version 8; gene_name GSPT2; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	56729241	56818380	.	+	.	gene_id ENSG00000204272; gene_version 12; gene_name NBDY; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	56818298	56995827	.	-	.	gene_id ENSG00000204271; gene_version 12; gene_name SPIN3; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	71366239	71532374	.	+	.	gene_id ENSG00000147133; gene_version 15; gene_name TAF1; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	72329516	72573103	.	-	.	gene_id ENSG00000147099; gene_version 19; gene_name HDAC8; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	81201943	81298547	.	+	.	gene_id ENSG00000131171; gene_version 12; gene_name SH3BGRL; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	103576231	103587736	.	+	.	gene_id ENSG00000133142; gene_version 17; gene_name TCEAL4; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	120250752	120258398	.	+	.	gene_id ENSG00000177485; gene_version 6; gene_name ZBTB33; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	130202711	130268899	.	-	.	gene_id ENSG00000056277; gene_version 15; gene_name ZNF280C; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	131273506	131578899	.	-	.	gene_id ENSG00000147255; gene_version 18; gene_name IGSF1; gene_source ensembl_havana; gene_biotype protein_coding;
+X	havana	gene	135020504	135022529	.	-	.	gene_id ENSG00000212747; gene_version 4; gene_name RTL8B; gene_source havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	135050932	135052196	.	-	.	gene_id ENSG00000203950; gene_version 6; gene_name RTL8A; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	135520643	135582510	.	+	.	gene_id ENSG00000165359; gene_version 15; gene_name INTS6L; gene_source ensembl_havana; gene_biotype protein_coding;
+X	ensembl_havana	gene	152638183	152657534	.	+	.	gene_id ENSG00000268089; gene_version 2; gene_name GABRQ; gene_source ensembl_havana; gene_biotype protein_coding;

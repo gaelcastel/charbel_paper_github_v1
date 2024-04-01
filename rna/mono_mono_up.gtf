@@ -1,0 +1,2 @@
+X	ensembl_havana	gene	23783173	23786226	.	+	.	gene_id ENSG00000130066; gene_version 16; gene_name SAT1; gene_source ensembl_havana; gene_biotype protein_coding;
+X	havana	gene	47803296	47804789	.	+	.	gene_id ENSG00000188459; gene_version 4; gene_name WASF4P; gene_source havana; gene_biotype processed_pseudogene;

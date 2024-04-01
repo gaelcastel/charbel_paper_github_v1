@@ -1,0 +1,4 @@
+X	havana	gene	86084716	86086339	.	-	.	gene_id ENSG00000225536; gene_version 2; gene_name STIP1P3; gene_source havana; gene_biotype processed_pseudogene;
+X	havana	gene	95973328	95974315	.	-	.	gene_id ENSG00000232842; gene_version 2; gene_name AL137845.2; gene_source havana; gene_biotype processed_pseudogene;
+X	ensembl_havana	gene	107123427	107206433	.	-	.	gene_id ENSG00000198088; gene_version 10; gene_name NUP62CL; gene_source ensembl_havana; gene_biotype protein_coding;
+X	havana	gene	107131659	107132269	.	+	.	gene_id ENSG00000213569; gene_version 4; gene_name AL390039.1; gene_source havana; gene_biotype processed_pseudogene;
