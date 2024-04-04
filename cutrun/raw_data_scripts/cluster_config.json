@@ -1,0 +1,56 @@
+{
+    "__default__":
+    {
+        "cpu" : 4,
+        "ram" : "16GB",
+        "partition" : "ipop-up"
+    },
+    "bowtie2_yeast":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_coli":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_mus":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_hg38":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_calJac4":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"
+    },
+    
+    "Perform_Xenofilter":
+    {
+        "cpu" : 8,
+        "ram" : "64GB",
+        "partition" : "ipop-up"        
+    },
+
+    "calJac4_bowtie2_index":
+    {
+        "cpu" : 8,
+        "ram" : "80GB",
+        "partition" : "ipop-up"
+    }
+}
