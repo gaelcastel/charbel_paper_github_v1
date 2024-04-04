@@ -1,0 +1,370 @@
+configfile: "config.json"
+
+# D165T32, D165T33, D165T34 corrupted files? <- CAUTION about that
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+rule all:
+    input:
+        fastq_trimmed_fastqc_rna_seq=expand(OUTDIR+"/rna_seq/fastqc_trimmed/{sample_rna_seq}_trimmed_{pair}_fastqc.html", sample_rna_seq=config["SAMPLES_RNA_SEQ"], pair=["R1","R2"]),
+        fastq_trimmed_fastqc_gro_seq=expand(OUTDIR+"/gro_seq/fastqc_trimmed/{sample_gro_seq}_trimmed_{pair}_fastqc.html", sample_gro_seq=config["SAMPLES_GRO_SEQ"], pair=["R1","R2"]),
+        counts_rna_seq=expand(OUTDIR+"/rna_seq/raw_counts_htseq/{sample_rna_seq}_raw_counts.txt", sample_rna_seq=config["SAMPLES_RNA_SEQ"]),
+        counts_gro_seq=expand(OUTDIR+"/gro_seq/raw_counts_htseq/{sample_gro_seq}_raw_counts.txt", sample_gro_seq=config["SAMPLES_GRO_SEQ"]),
+        bam_stats_rna_seq=expand(OUTDIR+"/rna_seq/bam/{sample_rna_seq}/Filtered_bams/{sample_rna_seq}_Filtered_bam_stat.txt", sample_rna_seq=config["SAMPLES_RNA_SEQ"]),
+        bam_stats_gro_seq=expand(OUTDIR+"/gro_seq/bam/{sample_gro_seq}/Filtered_bams/{sample_gro_seq}_Filtered_bam_stat.txt", sample_gro_seq=config["SAMPLES_GRO_SEQ"]),
+        bw_rna=expand(OUTDIR+"/rna_seq/bigwig/{sample_rna_seq}.bpm.bw",sample_rna_seq=config["SAMPLES_RNA_SEQ"]),
+        bw_gro=expand(OUTDIR+"/gro_seq/bigwig/{sample_gro_seq}.bpm.bw",sample_gro_seq=config["SAMPLES_GRO_SEQ"])
+
+
+
+rule trimgalore_primed:
+    priority:4
+    input:
+        fastq1_primed=OUTDIR+"/rna_seq/fastq/raw/{sample}.R1.fastq.gz",
+        fastq2_primed=OUTDIR+"/rna_seq/fastq/raw/{sample}.R2.fastq.gz"	
+    params:
+        fastq1_trimmed_primed=OUTDIR+"/rna_seq/fastq/trimmed/{sample}.R1_val_1.fq.gz",
+        fastq2_trimmed_primed=OUTDIR+"/rna_seq/fastq/trimmed/{sample}.R2_val_2.fq.gz"
+    output:
+        fastq1_trimmed_primed_renamed=OUTDIR+"/rna_seq/fastq/trimmed/{sample}_trimmed_R1.fastq.gz",
+        fastq2_trimmed_primed_renamed=OUTDIR+"/rna_seq/fastq/trimmed/{sample}_trimmed_R2.fastq.gz"
+
+    shell:"""
+    trim_galore --length 50 --paired -o '{OUTDIR}/rna_seq/fastq/trimmed' {input.fastq1_primed} {input.fastq2_primed}
+    mv {params.fastq1_trimmed_primed} {output.fastq1_trimmed_primed_renamed}
+    mv {params.fastq2_trimmed_primed} {output.fastq2_trimmed_primed_renamed}
+    """
+# # --length 50 : reads < 50 after trimming are discarded
+# # fait automatiquement le fastqc sur les fastq trimmés ??
+# # conserve les cell barcodes pour le démultiplexage?
+# # Paired-end:
+# # The *_trimmed.fq.gz are produced as intermediate output (as R1 and R2 are trimmed individually in the first instance).
+# # Once the trimming has completed, Trim Galore will launch a round of 'validation' (which is is where the files get the val in their names from),
+# # which primarily performs length-cutoff filtering (and a few more optional things I believe).
+# # Once the validation is complete, the trimmed files will be deleted, and you are left with only the files N1_1_val_1.fq.gz and N1_2_val_2.fq.gz.
+# # Change these names to match format of already trimmed files given by Charbel
+
+###################################FASTQC_TRIMMED#####################################
+
+rule fastqc_trimmed:
+    priority:3
+    input:
+        fastq_trimmed=OUTDIR+"/{technique}_seq/fastq/trimmed/{sample}.fastq.gz"
+    output: OUTDIR+"/{technique}_seq/fastqc_trimmed/{sample}_fastqc.html"
+    params:
+        cpu = 1
+    log:
+        out="log/FASTQC_{technique}_{sample}.out",
+        err="log/FASTQC_{technique}_{sample}.err"
+    shell:"""
+    fastqc -o '{OUTDIR}/{wildcards.technique}_seq/fastqc_trimmed' {input.fastq_trimmed} 1> {log.out} 2> {log.err}
+    """
+
+rule bowtie2_mus:
+    input:
+        sample=[OUTDIR+"/{technique}_seq/fastq/trimmed/{sample}_trimmed_R1.fastq.gz", OUTDIR+"/{technique}_seq/fastq/trimmed/{sample}_trimmed_R2.fastq.gz"]
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.bam")
+    threads: 8
+    resources:
+        load=12
+    params:
+        index="/shared/projects/xci/ReferenceGenomes/mm10/bowtie2/mm10",
+        extra="--local --very-sensitive-local --no-unal --no-mixed --no-discordant --phred33 -L 10 -X 700"
+    log:
+        "log/{technique}_{sample}_bowtie2_mus.log"
+    priority: 2
+    wrapper:
+        "0.78.0/bio/bowtie2/align"
+
+rule samtools_sort_mus:
+    input:
+        OUTDIR+"/{technique}_seq/bam/{sample}.mus.bam"
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.sorted.mus.bam")
+    threads: 8
+    log:
+        "log/{technique}_{sample}_samtools_sort_mus.log"
+    priority: 2
+    shell:
+        "(samtools sort -@ {threads} \
+            -o {output} \
+            {input}) 2> {log}"
+
+rule mus_index:
+    input: OUTDIR+"/{technique}_seq/bam/{sample}.sorted.mus.bam"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.sorted.mus.bam.bai")
+    log: "log/{technique}_{sample}_index_mus.log"
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.78.0/bio/samtools/index"
+
+rule bowtie2_hg38:
+    input:
+        sample=[OUTDIR+"/{technique}_seq/fastq/trimmed/{sample}_trimmed_R1.fastq.gz", OUTDIR+"/{technique}_seq/fastq/trimmed/{sample}_trimmed_R2.fastq.gz"]
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.bam")
+    threads: 8
+    resources:
+        load=12
+    params:
+        index="/shared/projects/xci/ReferenceGenomes/GRCh38/bowtie2/hg38",
+        extra="--local --very-sensitive-local --no-unal --no-mixed --no-discordant --phred33 -L 10 -X 700"
+    log:
+        "log/{technique}_{sample}_bowtie2_hg38.log"
+    priority: 2
+    wrapper:
+        "0.78.0/bio/bowtie2/align"
+
+rule samtools_sort_hg38:
+    input:
+        OUTDIR+"/{technique}_seq/bam/{sample}.hg38.bam"
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.sorted.hg38.bam")
+    threads: 8
+    log:
+        "log/{technique}_{sample}_samtools_sort_hg38.log"
+    priority: 2
+    shell:
+        "(samtools sort -@ {threads} \
+            -o {output} \
+            {input}) 2> {log}"
+
+rule uniq_reads:
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}.sorted.hg38.bam",
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam")
+    params: qual=10
+    priority: 3
+    log:
+        "log/{technique}_{sample}_hg38_uniq.log"
+    shell:
+        "(samtools view -q {params.qual} -b {input.bam} > {output}) \
+            2> {log}"
+
+rule uniq_reads_mus:
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}.sorted.mus.bam",
+    output:
+        temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam")
+    params: qual=10
+    priority: 3
+    log:
+        "log/{technique}_{sample}_mus_uniq.log"
+    shell:
+        "(samtools view -q {params.qual} -b {input.bam} > {output}) \
+            2> {log}"
+
+rule samtools_index_hg38:
+    input: OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+rule samtools_index_mus:
+    input: OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+rule samtools_idxstats_hg38:
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam",
+        bai=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam.bai"
+    output: OUTDIR+"/{technique}_seq/bam/stats/{sample}.hg38.txt"
+    log: "log/{technique}_{sample}_stats_hg38.txt"
+    priority: 3
+    shell:
+        "(samtools idxstats {input.bam} > {output}) 2> {log}"
+
+# rule AddOrReplaceReadGroups:
+#     input:
+#         bam=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam",
+#         bai=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam.bai"
+#     output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.rg.added.bam")
+#     params:
+#         SO="coordinate",
+#         RGID="id",
+#         RGLB="library",
+#         RGPL="platform",
+#         RGPU="machine",
+#         RGSM="sample"
+#     priority: 5
+#     log:
+#         "log/{technique}_{sample}_hg38_AddOrReplaceReadGroups.log"
+#     shell:
+#         "(picard  AddOrReplaceReadGroups \
+#             I={input.bam} \
+#             O={output} \
+#             SO={params.SO} \
+#             RGID={params.RGID} \
+#             RGLB={params.RGLB} \
+#             RGPL={params.RGPL} \
+#             RGPU={params.RGPU} \
+#             RGSM={params.RGSM}) 2> {log}"
+
+# rule AddOrReplaceReadGroups_mus:
+#     input:
+#         bam=OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam",
+#         bai=OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam.bai"
+#     output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.rg.added.bam")
+#     params:
+#         SO="coordinate",
+#         RGID="id",
+#         RGLB="library",
+#         RGPL="platform",
+#         RGPU="machine",
+#         RGSM="sample"
+#     priority: 5
+#     log:
+#         "log/{technique}_{sample}_mus_AddOrReplaceReadGroups.log"
+#     shell:
+#         "(picard  AddOrReplaceReadGroups \
+#             I={input.bam} \
+#             O={output} \
+#             SO={params.SO} \
+#             RGID={params.RGID} \
+#             RGLB={params.RGLB} \
+#             RGPL={params.RGPL} \
+#             RGPU={params.RGPU} \
+#             RGSM={params.RGSM}) 2> {log}"
+
+
+rule MarkDuplicates:
+    input: 
+            bam=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam",
+            bai=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.uniq.bam.bai"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.dedupped.bam")
+    params:
+            CREATE_INDEX="true",
+            VALIDATION_STRINGENCY="SILENT",
+            REMOVE_DUPLICATES="true",
+            ASSUME_SORTED="true",
+            M="output.metrics"
+    log:
+        "log/{technique}_{sample}_hg38_MarkDuplicates.log"
+    priority: 6
+    shell:
+        "(picard MarkDuplicates \
+            I={input.bam} \
+            O={output} \
+            CREATE_INDEX={params.CREATE_INDEX} \
+            VALIDATION_STRINGENCY={params.VALIDATION_STRINGENCY} \
+            REMOVE_DUPLICATES={params.REMOVE_DUPLICATES} \
+            ASSUME_SORTED={params.ASSUME_SORTED} \
+            M={params.M}) 2> {log}"
+
+rule MarkDuplicates_mus:
+    input: 
+            bam=OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam",
+            bai=OUTDIR+"/{technique}_seq/bam/{sample}.mus.uniq.bam.bai"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.dedupped.bam")
+    params:
+            CREATE_INDEX="true",
+            VALIDATION_STRINGENCY="SILENT",
+            REMOVE_DUPLICATES="true",
+            ASSUME_SORTED="true",
+            M="output.metrics"
+    log:
+        "log/{technique}_{sample}_mus_MarkDuplicates.log"
+    priority: 6
+    shell:
+        "(picard MarkDuplicates \
+            I={input.bam} \
+            O={output} \
+            CREATE_INDEX={params.CREATE_INDEX} \
+            VALIDATION_STRINGENCY={params.VALIDATION_STRINGENCY} \
+            REMOVE_DUPLICATES={params.REMOVE_DUPLICATES} \
+            ASSUME_SORTED={params.ASSUME_SORTED} \
+            M={params.M}) 2> {log}"
+
+rule samtools_index_mus_md:
+    input: OUTDIR+"/{technique}_seq/bam/{sample}.mus.dedupped.bam"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.mus.dedupped.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+rule samtools_index_hg38_md:
+    input: OUTDIR+"/{technique}_seq/bam/{sample}.hg38.dedupped.bam"
+    output: temp(OUTDIR+"/{technique}_seq/bam/{sample}.hg38.dedupped.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+
+rule Perform_Xenofilter:
+    input: 
+        mouse_bam=OUTDIR+"/{technique}_seq/bam/{sample}.mus.dedupped.bam",
+        human_bam=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.dedupped.bam",
+        mouse_bam_bai=OUTDIR+"/{technique}_seq/bam/{sample}.mus.dedupped.bam.bai",
+        human_bam_bai=OUTDIR+"/{technique}_seq/bam/{sample}.hg38.dedupped.bam.bai"
+
+    output:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai"
+    log:"log/{technique}_{sample}_xenofilter.log"
+    shell:
+        "(Rscript Xeno.R {input.human_bam} {input.mouse_bam}) 2> {log}"
+
+rule stats_bam:
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai"
+    output: OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered_bam_stat.txt"
+    log: "log/{technique}_{sample}_filtered_bam_stat.err"
+    shell:"""
+    samtools idxstats {input.bam} > {output} 2> {log}
+    """
+
+rule htseq_count:
+    resources:
+        load=2
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai",
+        gtf=config["GTF"]
+    output:
+        ht_seq=temp(OUTDIR+"/{technique}_seq/raw_counts_htseq/{sample}_htseq-counts-raw.txt"),
+        counts=OUTDIR+"/{technique}_seq/raw_counts_htseq/{sample}_raw_counts.txt"
+    log:
+        "log/{technique}_{sample}_htseq_count.out"
+    shell:"""
+    htseq-count {input.bam} {input.gtf} \\
+    -f bam \\
+    --stranded reverse \\
+    -a 10 \\
+    -t exon \\
+    -i gene_id \\
+    -m intersection-nonempty > {output.ht_seq}
+    grep -v '__no_feature\|__ambiguous\|__too_low_aQual\|__not_aligned\|__alignment_not_unique' {output.ht_seq} > {output.counts}
+    """
+
+rule bigwig:
+    input:
+        bam=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/{technique}_seq/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai"
+    output: protected(OUTDIR+"/{technique}_seq/bigwig/{sample}.bpm.bw")
+    params:
+        normalizeUsing="BPM",
+        binSize=20,
+        smoothLength=40
+    log: "log/{technique}_{sample}_BPM.log"
+    shell:
+        "(bamCoverage -b {input.bam} \
+        --normalizeUsing {params.normalizeUsing}  --binSize {params.binSize} \
+        --smoothLength {params.smoothLength} -o {output}) 2> {log}"
