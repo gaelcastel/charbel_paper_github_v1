@@ -1,0 +1,16 @@
+{
+	"GTF": "/shared/projects/xci/ReferenceGenomes/GRCh38/GTF/hg38.gtf",
+	"OUTPUT_PATH": "/shared/projects/xci/homo_sapiens/stem_cells/charbel/paper",
+
+	"SAMPLES":{
+		"D1038C30":"D1038C30",
+		"D1038C31":"D1038C31",
+		"D1038C32":"D1038C32",
+		"D1038C33":"D1038C33",
+		"D859-D851C49":"D859-D851C49",
+		"D859-D851C50":"D859-D851C50",
+		"D859-D851C51":"D859-D851C51",
+		"D859-D851C52":"D859-D851C52"
+	}
+
+}

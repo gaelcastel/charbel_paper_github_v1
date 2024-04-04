@@ -1,0 +1,13 @@
+{
+	"GTF": "/shared/projects/xci/ReferenceGenomes/GRCh38/GTF/hg38.gtf",
+	"OUTPUT_PATH": "/shared/projects/xci/homo_sapiens/stem_cells/charbel/paper",
+
+	"SAMPLES":{
+		"PXGL_A11":"PXGL_A11",
+		"PXGL_B3":"PXGL_B3",
+		"PXGL_B4":"PXGL_B4",
+		"PXGL_DOX_A11":"PXGL_DOX_A11",
+		"PXGL_DOX_B3":"PXGL_DOX_B3",
+		"PXGL_DOX_B4":"PXGL_DOX_B4"
+	}
+}

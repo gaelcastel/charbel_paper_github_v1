@@ -1,0 +1,36 @@
+{
+    "__default__" :
+    {
+        "cpu" : 4,
+        "ram" : "16GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_mus" :
+    {
+        "cpu" : 8,
+        "ram" : "72GB",
+        "partition" : "ipop-up"
+    },
+
+    "bowtie2_hg38" :
+    {
+        "cpu" : 8,
+        "ram" : "72GB",
+        "partition" : "ipop-up"
+    },
+
+    "Perform_Xenofilter":
+    {
+        "cpu" : 10,
+        "ram" : "64GB",
+        "partition" : "ipop-up"        
+    },
+
+    "htseq_count" :
+    {
+        "cpu" : 8,
+        "ram" : "32GB",
+        "partition" : "ipop-up"
+    }
+}

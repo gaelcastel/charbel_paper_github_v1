@@ -1,0 +1,312 @@
+configfile: "config.json"
+
+# D165T32, D165T33, D165T34 corrupted files?
+
+OUTDIR = config["OUTPUT_PATH"]
+if(OUTDIR[-1] == "/") : OUTDIR = OUTDIR[:-1]
+
+rule all:
+    input:
+        fastq_trimmed_fastqc=expand(OUTDIR+"/rap/fastqc_trimmed/{sample}_trimmed.{pair}_fastqc.html", sample=config["SAMPLES"], pair=["R1","R2"]),
+        counts=expand(OUTDIR+"/rap/raw_counts_htseq/{sample}_raw_counts.txt", sample=config["SAMPLES"])
+
+###################################FASTQC_TRIMMED#####################################
+
+rule fastqc_trimmed:
+    priority:3
+    input:
+        fastq_trimmed=OUTDIR+"/rap/fastq/trimmed/{sample}.fastq.gz"
+    output: OUTDIR+"/rap/fastqc_trimmed/{sample}_fastqc.html"
+    params:
+        cpu = 1
+    log:
+        out="log/FASTQC_{sample}.out",
+        err="log/FASTQC_{sample}.err"
+    shell:"""
+    fastqc -o '{OUTDIR}/rap/fastqc_trimmed' {input.fastq_trimmed} 1> {log.out} 2> {log.err}
+    """
+
+rule bowtie2_mus:
+    input:
+        sample=[OUTDIR+"/rap/fastq/trimmed/{sample}_trimmed.R1.fastq.gz", OUTDIR+"/rap/fastq/trimmed/{sample}_trimmed.R2.fastq.gz"]
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.mus.bam")
+    threads: 8
+    resources:
+        load=12
+    params:
+        index="/shared/projects/xci/ReferenceGenomes/mm10/bowtie2/mm10",
+        extra="--local --very-sensitive-local --no-unal --no-mixed --no-discordant --phred33 -L 10 -X 700"
+    log:
+        "log/{sample}_bowtie2_mus.log"
+    priority: 2
+    wrapper:
+        "0.78.0/bio/bowtie2/align"
+
+rule samtools_sort_mus:
+    input:
+        OUTDIR+"/rap/bam/{sample}.mus.bam"
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.sorted.mus.bam")
+    threads: 8
+    log:
+        "log/{sample}_samtools_sort_mus.log"
+    priority: 2
+    shell:
+        "(samtools sort -@ {threads} \
+            -o {output} \
+            {input}) 2> {log}"
+
+rule mus_index:
+    input: OUTDIR+"/rap/bam/{sample}.sorted.mus.bam"
+    output: temp(OUTDIR+"/rap/bam/{sample}.sorted.mus.bam.bai")
+    log: "log/{sample}_index_mus.log"
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.78.0/bio/samtools/index"
+
+rule bowtie2_hg38:
+    input:
+        sample=[OUTDIR+"/rap/fastq/trimmed/{sample}_trimmed.R1.fastq.gz", OUTDIR+"/rap/fastq/trimmed/{sample}_trimmed.R2.fastq.gz"]
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.hg38.bam")
+    threads: 8
+    resources:
+        load=12
+    params:
+        index="/shared/projects/xci/ReferenceGenomes/GRCh38/bowtie2/hg38",
+        extra="--local --very-sensitive-local --no-unal --no-mixed --no-discordant --phred33 -L 10 -X 700"
+    log:
+        "log/{sample}_bowtie2_hg38.log"
+    priority: 2
+    wrapper:
+        "0.78.0/bio/bowtie2/align"
+
+rule samtools_sort_hg38:
+    input:
+        OUTDIR+"/rap/bam/{sample}.hg38.bam"
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.sorted.hg38.bam")
+    threads: 8
+    log:
+        "log/{sample}_samtools_sort_hg38.log"
+    priority: 2
+    shell:
+        "(samtools sort -@ {threads} \
+            -o {output} \
+            {input}) 2> {log}"
+
+rule uniq_reads:
+    input:
+        bam=OUTDIR+"/rap/bam/{sample}.sorted.hg38.bam",
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam")
+    params: qual=10
+    priority: 3
+    log:
+        "log/{sample}_hg38_uniq.log"
+    shell:
+        "(samtools view -q {params.qual} -b {input.bam} > {output}) \
+            2> {log}"
+
+rule uniq_reads_mus:
+    input:
+        bam=OUTDIR+"/rap/bam/{sample}.sorted.mus.bam",
+    output:
+        temp(OUTDIR+"/rap/bam/{sample}.mus.uniq.bam")
+    params: qual=10
+    priority: 3
+    log:
+        "log/{sample}_mus_uniq.log"
+    shell:
+        "(samtools view -q {params.qual} -b {input.bam} > {output}) \
+            2> {log}"
+
+rule samtools_index_hg38:
+    input: OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam"
+    output: temp(OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+rule samtools_index_mus:
+    input: OUTDIR+"/rap/bam/{sample}.mus.uniq.bam"
+    output: temp(OUTDIR+"/rap/bam/{sample}.mus.uniq.bam.bai")
+    params:
+        "" # optional params string
+    priority: 3
+    wrapper:
+        "0.30.0/bio/samtools/index"
+
+rule samtools_idxstats_hg38:
+    input:
+        bam=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam",
+        bai=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam.bai"
+    output: OUTDIR+"/rap/bam/stats/{sample}.hg38.txt"
+    log: "log/{sample}_stats_hg38.txt"
+    priority: 3
+    shell:
+        "(samtools idxstats {input.bam} > {output}) 2> {log}"
+
+# rule AddOrReplaceReadGroups:
+#     input:
+#         bam=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam",
+#         bai=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam.bai"
+#     output: temp(OUTDIR+"/rap/bam/{sample}.hg38.rg.added.bam")
+#     params:
+#         SO="coordinate",
+#         RGID="id",
+#         RGLB="library",
+#         RGPL="platform",
+#         RGPU="machine",
+#         RGSM="sample"
+#     priority: 5
+#     log:
+#         "log/{sample}_hg38_AddOrReplaceReadGroups.log"
+#     shell:
+#         "(picard  AddOrReplaceReadGroups \
+#             I={input.bam} \
+#             O={output} \
+#             SO={params.SO} \
+#             RGID={params.RGID} \
+#             RGLB={params.RGLB} \
+#             RGPL={params.RGPL} \
+#             RGPU={params.RGPU} \
+#             RGSM={params.RGSM}) 2> {log}"
+
+# rule AddOrReplaceReadGroups_mus:
+#     input:
+#         bam=OUTDIR+"/rap/bam/{sample}.mus.uniq.bam",
+#         bai=OUTDIR+"/rap/bam/{sample}.mus.uniq.bam.bai"
+#     output: temp(OUTDIR+"/rap/bam/{sample}.mus.rg.added.bam")
+#     params:
+#         SO="coordinate",
+#         RGID="id",
+#         RGLB="library",
+#         RGPL="platform",
+#         RGPU="machine",
+#         RGSM="sample"
+#     priority: 5
+#     log:
+#         "log/{sample}_mus_AddOrReplaceReadGroups.log"
+#     shell:
+#         "(picard  AddOrReplaceReadGroups \
+#             I={input.bam} \
+#             O={output} \
+#             SO={params.SO} \
+#             RGID={params.RGID} \
+#             RGLB={params.RGLB} \
+#             RGPL={params.RGPL} \
+#             RGPU={params.RGPU} \
+#             RGSM={params.RGSM}) 2> {log}"
+
+
+rule MarkDuplicates:
+    input: 
+            bam=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam",
+            bai=OUTDIR+"/rap/bam/{sample}.hg38.uniq.bam.bai"
+    output: temp(OUTDIR+"/rap/bam/{sample}.hg38.dedupped.bam")
+    params:
+            CREATE_INDEX="true",
+            VALIDATION_STRINGENCY="SILENT",
+            REMOVE_DUPLICATES="true",
+            ASSUME_SORTED="true",
+            M="output.metrics"
+    log:
+        "log/{sample}_hg38_MarkDuplicates.log"
+    priority: 6
+    shell:
+        "(picard MarkDuplicates \
+            I={input.bam} \
+            O={output} \
+            CREATE_INDEX={params.CREATE_INDEX} \
+            VALIDATION_STRINGENCY={params.VALIDATION_STRINGENCY} \
+            REMOVE_DUPLICATES={params.REMOVE_DUPLICATES} \
+            ASSUME_SORTED={params.ASSUME_SORTED} \
+            M={params.M}) 2> {log}"
+
+rule MarkDuplicates_mus:
+    input: 
+            bam=OUTDIR+"/rap/bam/{sample}.mus.uniq.bam",
+            bai=OUTDIR+"/rap/bam/{sample}.mus.uniq.bam.bai"
+    output: temp(OUTDIR+"/rap/bam/{sample}.mus.dedupped.bam")
+    params:
+            CREATE_INDEX="true",
+            VALIDATION_STRINGENCY="SILENT",
+            REMOVE_DUPLICATES="true",
+            ASSUME_SORTED="true",
+            M="output.metrics"
+    log:
+        "log/{sample}_mus_MarkDuplicates.log"
+    priority: 6
+    shell:
+        "(picard MarkDuplicates \
+            I={input.bam} \
+            O={output} \
+            CREATE_INDEX={params.CREATE_INDEX} \
+            VALIDATION_STRINGENCY={params.VALIDATION_STRINGENCY} \
+            REMOVE_DUPLICATES={params.REMOVE_DUPLICATES} \
+            ASSUME_SORTED={params.ASSUME_SORTED} \
+            M={params.M}) 2> {log}"
+
+# rule samtools_index_mus_md:
+#     input: OUTDIR+"/rap/bam/{sample}.mus.dedupped.bam"
+#     output: temp(OUTDIR+"/rap/bam/{sample}.mus.dedupped.bam.bai")
+#     params:
+#         "" # optional params string
+#     priority: 3
+#     wrapper:
+#         "0.30.0/bio/samtools/index"
+
+# rule samtools_index_hg38_md:
+#     input: OUTDIR+"/rap/bam/{sample}.hg38.dedupped.bam"
+#     output: temp(OUTDIR+"/rap/bam/{sample}.hg38.dedupped.bam.bai")
+#     params:
+#         "" # optional params string
+#     priority: 3
+#     wrapper:
+#         "0.30.0/bio/samtools/index"
+
+# samtools_index_md : redundant because CREATE_INDEX="true" in mark_duplicates ?
+
+
+rule Perform_Xenofilter:
+    input: 
+        mouse_bam=OUTDIR+"/rap/bam/{sample}.mus.dedupped.bam",
+        human_bam=OUTDIR+"/rap/bam/{sample}.hg38.dedupped.bam"
+
+    output:
+        bam=OUTDIR+"/rap/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/rap/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai"
+    log:"log/{sample}_xenofilter.log"
+    shell:
+        "(Rscript Xeno.R {input.human_bam} {input.mouse_bam}) 2> {log}"
+
+
+rule htseq_count:
+    resources:
+        load=2
+    input:
+        bam=OUTDIR+"/rap/bam/{sample}/Filtered_bams/{sample}_Filtered.bam",
+        bai=OUTDIR+"/rap/bam/{sample}/Filtered_bams/{sample}_Filtered.bam.bai",
+        gtf=config["GTF"]
+    output:
+        ht_seq=temp(OUTDIR+"/rap/raw_counts_htseq/{sample}_htseq-counts-raw.txt"),
+        counts=OUTDIR+"/rap/raw_counts_htseq/{sample}_raw_counts.txt"
+    log:
+        "log/{sample}_htseq_count.out"
+    shell:"""
+    htseq-count {input.bam} {input.gtf} \\
+    -f bam \\
+    --stranded no \\
+    -a 10 \\
+    -t exon \\
+    -i gene_id \\
+    -m intersection-nonempty > {output.ht_seq}
+    grep -v '__no_feature\|__ambiguous\|__too_low_aQual\|__not_aligned\|__alignment_not_unique' {output.ht_seq} > {output.counts}
+    """
+
