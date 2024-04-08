@@ -32,3 +32,15 @@ D1271T121,GRO_seq_B3_T,NGS22-4812,,E07,UDP0245,CACTAGAC,UDP0245,ATAAGGCA,Xprofil
 D1271T122,GRO_seq_B4_T,NGS22-4812,,F07,UDP0246,ATTATCCA,UDP0246,TACGTGCG,Xprofiling,Homo_sapiens,gro_seq_d1271,treatment,naive,B4,T
 SRR529646,H9_non_eroded_xist_+_primed,run_vallot_2015,,NA,NA,NA,NA,NA,erosion,Homo_sapiens,rna_seq_dvallot,non_eroded,primed,R1,WT
 SRR529647,H9_eroded_xist_minus_primed,run_vallot_2015,,NA,NA,NA,NA,NA,erosion,Homo_sapiens,rna_seq_dvallot,eroded,primed,R1,WT
+D1507T282,siScr_Rep1,NGS23-5279,,B11,UDP0178,GATCGTCGCG,UDP0178,ACATATCCAG,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T283,siScr_Rep2,NGS23-5279,,C11,UDP0179,TATCCGAGGC,UDP0179,CTTATTGGCC,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T284,siScr_Rep3,NGS23-5279,,D11,UDP0180,CGCTGTCTCA,UDP0180,GGTGAGTAAT,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T285,siSPEN_CTL_Rep1,NGS23-5279,,E11,UDP0181,AATGCGAACA,UDP0181,TCCGCCAATT,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T286,siSPEN_CTL_Rep2,NGS23-5279,,F11,UDP0182,AATTCTTGGA,UDP0182,AAGTTGACAA,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T287,siSPEN_CTL_Rep3,NGS23-5279,,G11,UDP0183,TTCCTACAGC,UDP0183,AGAATTCGCC,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T288,siSPEN_Mix_Rep1,NGS23-5279,,H11,UDP0184,ATCCAGGTAT,UDP0184,GCTGACGTTG,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T289,siSPEN_Mix_Rep2,NGS23-5279,,A12,UDP0185,ACGGTCCAAC,UDP0185,TGATGTAAGA,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T290,siSPEN_Mix_Rep3,NGS23-5279,,B12,UDP0186,GTAACTTGGT,UDP0186,AGGTATGGCG,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T291,siScr_primed,NGS23-5279,,C12,UDP0187,AGCGCCACAC,UDP0187,AAGACATTAG,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T292,siSPEN_CTL_primed,NGS23-5279,,D12,UDP0188,TGCTACTGCC,UDP0188,CCTCCGGTTG,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""
+D1507T293,siSPEN_Mix_primed,NGS23-5279,,E12,UDP0189,CAACACCGCA,UDP0189,TGCTACTGCC,Xprofiling,Homo_sapiens,rna_seq_d1507,"","","",""

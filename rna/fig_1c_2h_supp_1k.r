@@ -2,32 +2,42 @@ setwd('C:/Users/surfi/Desktop/charbel_paper_2024/2024_04/charbel_paper_github_v1
 
 source("https://gitlab.univ-nantes.fr/E114424Z/veneR/-/raw/master/loadFun.R")
 
+options(install.packages.compile.from.source = "always")
+
 # .libPaths(c("/shared/projects/xci/r_packages/","/shared/software/conda/envs/r-4.1.1/lib/R/library/"))
 
+needed_func=c("BiocManager",
+"dplyr",
+"tidyr",
+"ggplot2",
+"SingleCellExperiment",
+"Matrix",
+"stringr",
+"devtools",
+"pcaMethods",
+"data.table",
+"parallel",
+"DESeq2",
+"ggpubr",
+"tidyverse",
+"EnhancedVolcano",
+"biomaRt",
+"sva",
+"gtools",
+"statebins",
+"wesanderson")
 
-# BiocManager::install('EnhancedVolcano')
-# BiocManager::install("sva")
-# BiocManager::install("gtools")
+sapply(needed_func,function(x){
+    if (x!="BiocManager" & !requireNamespace(x, quietly = T)){
+      BiocManager::install(x, dependencies = TRUE, INSTALL_opts = '--no-lock')
+    }
 
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-library(dplyr)
-library(SingleCellExperiment)
-library(Matrix)
-library(stringr)
-library(BiocManager)
-library(devtools)
-library(pcaMethods)
-library(data.table)
-library(parallel)
-library(DESeq2)
-library(ggpubr)
-library(tidyverse)
-library(EnhancedVolcano)
-library(biomaRt)
-library(sva)
-library(gtools)
+    else if (x=="BiocManager" & !requireNamespace(x, quietly = T)){
+      install.packages(x,repos="http://cran.r-project.org", dependencies = TRUE, INSTALL_opts = '--no-lock')
+    }
+  library(x,character.only = TRUE)
+}
+)
 
 # chrX
 
@@ -64,6 +74,7 @@ gtf %>%
 
 
 sample_annot=fastRead("sample_annot_all.txt", header=T, sep=",",as.matrix = F)
+sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
 sample_annot$sample_id=rn(sample_annot)
 sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
 
@@ -413,6 +424,7 @@ qual_conv <- function(ascii){
 
 
 sample_annot=fastRead("sample_annot_all.txt", header=T, sep=",",as.matrix = F)
+sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
 sample_annot$sample_id=rn(sample_annot)
 sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
 

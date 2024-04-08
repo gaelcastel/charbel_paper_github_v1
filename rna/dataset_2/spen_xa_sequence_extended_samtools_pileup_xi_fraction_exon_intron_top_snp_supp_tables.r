@@ -1,7 +1,7 @@
 # vcf from bcftools already on SNP in H9 CHR X !!!!! BUT CAUTION !!! :not only heterozygous SNP !!! so I applied detect_bi on informative_H9_wgs.vcf
 # Could be relevant to re-run bcftools intersect on this vcf -> bed only informative SNP heterozygous chrX to re-generate samples.vcf
 
-setwd('C:/Users/surfi/Desktop/charbel_paper_2024/2024_04/charbel_paper_github_v1/rna/')
+setwd('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/')
 
 # ex. biallelic: DP4=0,3,2,0 : 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles
 # ex. monoallelic: ; DP4=0,0,1,1: 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles. BUT also DP4=1,1,10,1 (proba/stat)
@@ -36,7 +36,7 @@ library(sva)
 library(gtools)
 
 open_file <- function(sample){
-    snp <- read.table(paste0("vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chrX.pileup"), header = FALSE,
+    snp <- read.table(paste0("dataset_2/vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chrX.pileup"), header = FALSE,
                    sep = "\t")
     colnames(snp) <- c("chrom", "pos", "ref", "dp", "alts", "bq", "mq")
     return(snp)
@@ -58,7 +58,7 @@ qual_conv <- function(ascii){
 ascii_qual=read.tsv("ascii_qual.tsv",comment.char = "")
 ascii_qual$symbol=rn(ascii_qual)
 
-gtf=read.table("../../hg38.gtf", header=F, sep="\t")
+gtf=read.table("hg38.gtf", header=F, sep="\t")
 colnames(gtf)=c('chrom','source','feature','start',
                 'end',
                 'score',
@@ -106,7 +106,7 @@ centromeres[["chromosome"]] <- factor(x = centromeres[["chromosome"]],
 # create a color key for the plot
 #group.colors <- c(gain = "red", loss = "blue")
 
-informative_pos_vcf_chrX=read.table('H9_WGS_hg38_filtered_chrX.vcf')
+informative_pos_vcf_chrX=read.table('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/H9_WGS_hg38_filtered_chrX.vcf')
 colnames(informative_pos_vcf_chrX)=c("chrom", "pos", "id", "ref", "alt", "qual", "filter", "info", "format", "sample")
 informative_pos_vcf_chrX=informative_pos_vcf_chrX[grep("0/0|0/1|1/1", informative_pos_vcf_chrX$sample),] #remove alt_2 because very low frequency/probability
 # and annoying for computation
@@ -126,10 +126,16 @@ informative_pos_vcf_chrX$allele_maj_num=apply(informative_pos_vcf_chrX,1,functio
 informative_pos_vcf_chrX$allele_min_num=apply(informative_pos_vcf_chrX,1,function(x){min(as.numeric(x['allele_0']),as.numeric(x['allele_1']))})
 informative_pos_vcf_chrX=detect_bi(informative_pos_vcf_chrX)
 
-sample_annot=fastRead("sample_annot_all.txt", header=T, sep=",",as.matrix = F)
-sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
-sample_annot$sample_id=rn(sample_annot)
-sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
+sample_annot=read.csv("dataset_2/SampleSheet.csv", header=T, comment.char = '#')
+rownames(sample_annot)=paste0("D1507",sample_annot$Sample_ID)
+sample_annot$sample_id=paste0("D1507",sample_annot$Sample_ID)
+sample_annot$group=sub('_[^_]*$', '', sample_annot$Sample_Name)
+sample_annot$group=str_replace_all(sample_annot$group,"CTL","1")
+sample_annot$group=str_replace_all(sample_annot$group,"Mix","2")
+sample_annot$replicate=sub('.*_', '', sample_annot$Sample_Name)
+sample_annot$replicate[sample_annot$replicate=="primed"]<-"Rep1"
+sample_annot$cell_type=sub('.*_', '', sample_annot$Sample_Name)
+sample_annot$cell_type[sample_annot$cell_type!="primed"]<-"pxgl"
 
 sample_list=NULL
 sample_list_bi=NULL
@@ -283,9 +289,9 @@ for (sample in rn(sample_annot)){
       ylab("region (bp)") + 
       # scale_color_gradient(low="gold", high="red", limits = c(-10,10)) +
       # scale_fill_gradient(low="gold", high="red", limits = c(-10,10)) +
-      ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type","condition")], collapse ="_"))
+      ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"))
     
-    # ggsave(paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type","condition")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chrX.pdf"))
+    # ggsave(paste0("dataset_2/",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chrX.pdf")))
 
     
     # % biallelism chrX primed vs naive
@@ -297,13 +303,13 @@ sample=NULL
 
 for(sample in names(sample_list)){
   df_to_be_written=sample_list[[sample]][,c("chrom","pos","dp","allele_maj","allele_maj_num","allele_min","allele_min_num","allelism")]
-  # write.tsv(df_to_be_written,file=paste(sep = "_",sample,"_chrX_snp_table.tsv"),row.names = F)
+  write.tsv(df_to_be_written,file=paste0("dataset_2/",paste(sep = "_",sample,"_chrX_snp_table.tsv")),row.names = F)
 }
 
-# chr7
+# CHR7
 
 open_file <- function(sample){
-  snp <- read.table(paste0("vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chr7.pileup"), header = FALSE,
+  snp <- read.table(paste0("dataset_2/vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chr7.pileup"), header = FALSE,
                     sep = "\t")
   colnames(snp) <- c("chrom", "pos", "ref", "dp", "alts", "bq", "mq")
   return(snp)
@@ -336,7 +342,7 @@ centromeres[["chromosome"]] <- factor(x = centromeres[["chromosome"]],
 # create a color key for the plot
 #group.colors <- c(gain = "red", loss = "blue")
 
-informative_pos_vcf_chr7=read.table('H9_WGS_hg38_filtered_chr7.vcf')
+informative_pos_vcf_chr7=read.table('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/H9_WGS_hg38_filtered_chr7.vcf')
 colnames(informative_pos_vcf_chr7)=c("chrom", "pos", "id", "ref", "alt", "qual", "filter", "info", "format", "sample")
 informative_pos_vcf_chr7=informative_pos_vcf_chr7[grep("0/0|0/1|1/1", informative_pos_vcf_chr7$sample),] #remove alt_2 because very low frequency/probability
 # and annoying for computation
@@ -356,10 +362,16 @@ informative_pos_vcf_chr7$allele_maj_num=apply(informative_pos_vcf_chr7,1,functio
 informative_pos_vcf_chr7$allele_min_num=apply(informative_pos_vcf_chr7,1,function(x){min(as.numeric(x['allele_0']),as.numeric(x['allele_1']))})
 informative_pos_vcf_chr7=detect_bi(informative_pos_vcf_chr7)
 
-sample_annot=fastRead("sample_annot_all.txt", header=T, sep=",",as.matrix = F)
-sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
-sample_annot$sample_id=rn(sample_annot)
-sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
+sample_annot=read.csv("dataset_2/SampleSheet.csv", header=T, comment.char = '#')
+rownames(sample_annot)=paste0("D1507",sample_annot$Sample_ID)
+sample_annot$sample_id=paste0("D1507",sample_annot$Sample_ID)
+sample_annot$group=sub('_[^_]*$', '', sample_annot$Sample_Name)
+sample_annot$group=str_replace_all(sample_annot$group,"CTL","1")
+sample_annot$group=str_replace_all(sample_annot$group,"Mix","2")
+sample_annot$replicate=sub('.*_', '', sample_annot$Sample_Name)
+sample_annot$replicate[sample_annot$replicate=="primed"]<-"Rep1"
+sample_annot$cell_type=sub('.*_', '', sample_annot$Sample_Name)
+sample_annot$cell_type[sample_annot$cell_type!="primed"]<-"pxgl"
 
 sample_list=NULL
 sample_list_bi=NULL
@@ -513,9 +525,9 @@ for (sample in rn(sample_annot)){
     ylab("region (bp)") + 
     # scale_color_gradient(low="gold", high="red", limits = c(-10,10)) +
     # scale_fill_gradient(low="gold", high="red", limits = c(-10,10)) +
-    ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type","condition")], collapse ="_"))
+    ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"))
   
-  # ggsave(paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type","condition")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chr7.pdf"))
+  # ggsave(paste0("dataset_2/",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chr7.pdf")))
   
   
   # % biallelism chr7 primed vs naive
@@ -527,8 +539,5 @@ sample=NULL
 
 for(sample in names(sample_list)){
   df_to_be_written=sample_list[[sample]][,c("chrom","pos","dp","allele_maj","allele_maj_num","allele_min","allele_min_num","allelism")]
-  # write.tsv(df_to_be_written,file=paste(sep = "_",sample,"_chr7_snp_table.tsv"),row.names = F)
+  write.tsv(df_to_be_written,file=paste0("dataset_2/",paste(sep = "_",sample,"_chr7_snp_table.tsv")),row.names = F)
 }
-
-
-

@@ -31,6 +31,7 @@ colnames(gene_chr)=c("gene","chr")
 
 raw_count_files=list.files(path = 'raw_counts/',pattern = "_raw_counts.txt")
 sample_annot=fastRead("./sample_annot_all.txt", header=T, sep=",",as.matrix = F)
+sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
 sample_annot$sample_id=rn(sample_annot)
 sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
 

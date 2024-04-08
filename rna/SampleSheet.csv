@@ -1,0 +1,33 @@
+#[Header]
+#IEMFileVersion,5
+#Investigator Name,FV
+#Experiment Name,5288-5279
+#Date,22/08/2023
+#Workflow,GenerateFASTQ
+#Application,NovaSeq FASTQ Only
+#Instrument Type,NovaSeq
+#Assay,Illumina Stranded Total RNA
+#Index Adapters,"IDT-Ilmn RNA UD Indexes SetB Ligation"
+#Chemistry,Amplicon
+#
+#[Reads]
+#101
+#101
+#
+#[Settings]
+#Adapter,CTGTCTCTTATACACATCT
+#
+#[Data]
+Sample_ID,Sample_Name,Sample_Plate,Sample_Well,Index_Plate_Well,I7_Index_ID,index,I5_Index_ID,index2,Sample_Project,Description
+T282,siScr_Rep1,NGS23-5279,,B11,UDP0178,GATCGTCGCG,UDP0178,ACATATCCAG,Xprofiling,Homo_sapiens
+T283,siScr_Rep2,NGS23-5279,,C11,UDP0179,TATCCGAGGC,UDP0179,CTTATTGGCC,Xprofiling,Homo_sapiens
+T284,siScr_Rep3,NGS23-5279,,D11,UDP0180,CGCTGTCTCA,UDP0180,GGTGAGTAAT,Xprofiling,Homo_sapiens
+T285,siSPEN_CTL_Rep1,NGS23-5279,,E11,UDP0181,AATGCGAACA,UDP0181,TCCGCCAATT,Xprofiling,Homo_sapiens
+T286,siSPEN_CTL_Rep2,NGS23-5279,,F11,UDP0182,AATTCTTGGA,UDP0182,AAGTTGACAA,Xprofiling,Homo_sapiens
+T287,siSPEN_CTL_Rep3,NGS23-5279,,G11,UDP0183,TTCCTACAGC,UDP0183,AGAATTCGCC,Xprofiling,Homo_sapiens
+T288,siSPEN_Mix_Rep1,NGS23-5279,,H11,UDP0184,ATCCAGGTAT,UDP0184,GCTGACGTTG,Xprofiling,Homo_sapiens
+T289,siSPEN_Mix_Rep2,NGS23-5279,,A12,UDP0185,ACGGTCCAAC,UDP0185,TGATGTAAGA,Xprofiling,Homo_sapiens
+T290,siSPEN_Mix_Rep3,NGS23-5279,,B12,UDP0186,GTAACTTGGT,UDP0186,AGGTATGGCG,Xprofiling,Homo_sapiens
+T291,siScr_primed,NGS23-5279,,C12,UDP0187,AGCGCCACAC,UDP0187,AAGACATTAG,Xprofiling,Homo_sapiens
+T292,siSPEN_CTL_primed,NGS23-5279,,D12,UDP0188,TGCTACTGCC,UDP0188,CCTCCGGTTG,Xprofiling,Homo_sapiens
+T293,siSPEN_Mix_primed,NGS23-5279,,E12,UDP0189,CAACACCGCA,UDP0189,TGCTACTGCC,Xprofiling,Homo_sapiens
