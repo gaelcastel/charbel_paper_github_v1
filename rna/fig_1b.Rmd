@@ -1,0 +1,457 @@
+---
+  title: "RNA-Seq, GRO-Seq"
+author: "Alfeghaly et al, 2024"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+  toc: yes
+number_sections: true
+toc_depth: 3
+toc_float: true
+code_folding: hide
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=T, echo=T, warning=F, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+```{r load libraries, include=T, echo=T, warning=F, message=FALSE}
+
+setwd('C:/Users/surfi/Desktop/charbel_paper_2024/2024_04/charbel_paper_github_v1/rna/')
+
+source("https://gitlab.univ-nantes.fr/E114424Z/veneR/-/raw/master/loadFun.R")
+
+# .libPaths(c("/shared/projects/xci/r_packages/","/shared/software/conda/envs/r-4.1.1/lib/R/library/"))
+# ALSO: make it expandable/deployable to IPOP-UP cluster
+
+# NB: for reproducibility, prefer: if requires(package) -> BiocManager::install(package) -> library(package)
+
+# BiocManager::install('EnhancedVolcano')
+# BiocManager::install("monocle3")
+
+# library(monocle3)
+library(SingleCellExperiment)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(Matrix)
+library(stringr)
+library(BiocManager)
+library(devtools)
+library(pcaMethods)
+library(data.table)
+library(parallel)
+library(DESeq2)
+library(ggpubr)
+library(tidyverse)
+library(EnhancedVolcano)
+library(rstatix)
+library(biomaRt)
+library(gtools)
+library(parallel)
+library(statebins)
+library(sva)
+library(tidyverse)
+library(wesanderson)
+library(kableExtra)
+# library(ScaledMatrix)
+library(DelayedArray)
+# library(BiocSingular)
+# library(uwot)
+# library(speedglm)
+library(plotly)
+library(doParallel)
+library(circlize)
+library(ComplexHeatmap)
+# library(WGCNA)
+
+heatmap.DM4 <- function(matrix,preSet="expression",clustering_distance_rows=NULL,clustering_distance_columns="euclidean",clustering_method_columns="ward.D2",
+                        clustering_method_rows="ward.D2",autoFontSizeRow=TRUE,autoFontSizeColumn=TRUE,scale=FALSE,center=TRUE,returnHeatmap=FALSE,name=NULL,
+                        additionnalRowNamesGpar=NULL,additionnalColNamesGpar=list(),border=TRUE,
+                        colorScale=NULL,colorScaleFun=NULL,midColorIs0=NULL,probs=NULL,useProb=TRUE,minProb=0.05,maxProb=0.95,
+                        cluster_rows=NULL,cluster_columns=NULL,sampleAnnot=NULL,colorAnnot=NULL,showGrid=NULL,gparGrid=gpar(col="black"),showValues=FALSE,Nsignif=3,
+                        column_dend_reorder = FALSE, row_dend_reorder=FALSE, ...){
+  require("ComplexHeatmap")
+  require("circlize")
+  
+  args<-list()
+  allowedPreSet<-c("default","expression","correlation","distance")
+  if(!preSet%in%allowedPreSet){
+    stop(paste0("preSet must equal to one of this value: ",paste0(allowedPreSet,collapse = ", ")))
+  }
+  
+  if(preSet=="expression"){
+    if(is.null(clustering_distance_rows)) clustering_distance_rows = corrDistBicor
+    if(is.null(name)) name="centered log expression"
+    if(is.null(midColorIs0)) midColorIs0=TRUE
+    if(is.null(colorScale)) colorScale= c("darkblue","white","red2")
+    if(is.null(additionnalRowNamesGpar)) additionnalRowNamesGpar=list(fontface="italic")
+  }else if(preSet=="correlation"){
+    if(is.null(clustering_distance_rows)) clustering_distance_rows ="euclidean"
+    if(is.null(clustering_distance_columns)) clustering_distance_columns ="euclidean"
+    if(is.null(name)) name="Pearson\ncorrelation"
+    if(is.null(midColorIs0)) midColorIs0=TRUE
+    if(is.null(colorScale)) colorScale=c("darkblue","white","red2")
+    if(is.null(additionnalRowNamesGpar)) additionnalRowNamesGpar=list()
+  }else if(preSet=="distance"){
+    if(is.null(clustering_distance_rows)) clustering_distance_rows ="euclidean"
+    if(is.null(name)) name="Euclidean\ndistance"
+    if(is.null(midColorIs0)) midColorIs0=FALSE
+    if(is.null(colorScale)) colorScale=c("white","yellow","red","purple")
+    if(is.null(additionnalRowNamesGpar)) additionnalRowNamesGpar=list()
+  }else if(preSet=="default"){
+    if(is.null(clustering_distance_rows)) clustering_distance_rows = corrDistBicor
+    if(is.null(name)) name="matrix"
+    if(is.null(midColorIs0)) midColorIs0=TRUE
+    if(is.null(colorScale)) colorScale=c("#2E3672","#4B9AD5","white","#FAB517","#E5261D")
+    if(is.null(additionnalRowNamesGpar)) additionnalRowNamesGpar=list()
+  }
+  
+  if(is.null(cluster_rows)){
+    args$clustering_method_rows<-clustering_method_rows
+    args$clustering_distance_rows<-clustering_distance_rows
+  }else{
+    args$cluster_rows<-cluster_rows
+  }
+  if(is.null(cluster_columns)){
+    args$clustering_method_columns<-clustering_method_columns
+    args$clustering_distance_columns<-clustering_distance_columns
+  }else{
+    args$cluster_columns<-cluster_columns
+  }
+  matrix<-as.matrix(matrix)
+  if(min(apply(matrix,1,sd))==0 & (scale | identical(corrDist,clustering_distance_rows)) ){
+    warning("some row have a 0 sd. sd-based method (correlation distance, scaling) will be desactivated or switched.")
+    scale=FALSE
+    if(identical(corrDist,clustering_distance_rows)){
+      args$clustering_distance_rows<-"euclidean"
+    }
+  }
+  
+  if(scale | center) matrix<-rowScale(matrix,scaled=scale,center=center)
+  if(is.null(colorScaleFun)){
+    colorScaleFun<-computeColorScaleFun(colors = colorScale,values = unlist(matrix),useProb = useProb,probs = probs,minProb = minProb,
+                                        maxProb = maxProb, midColorIs0 = midColorIs0,returnColorFun = TRUE)
+  }
+  args$col<-colorScaleFun
+  if(is.null(showGrid)){
+    if(nrow(matrix)*ncol(matrix)<500){
+      showGrid = TRUE
+    }else{
+      showGrid = FALSE
+    }
+  }
+  if(showGrid){
+    args$rect_gp = gparGrid
+  }
+  if(showValues){
+    args$cell_fun = function(j, i, x, y, w, h, col) {
+      #dark or light background .
+      if(colSums(col2rgb(col))<382.5) col="white" else col="black"
+      grid.text(as.character(signif(matrix[i,j],Nsignif)),x,y,gp=gpar(col=col))
+    }
+  }
+  if(autoFontSizeRow) args$row_names_gp=do.call("autoGparFontSizeMatrix",c(list(nrow(matrix)),additionnalRowNamesGpar))
+  if(autoFontSizeColumn) args$column_names_gp=do.call("autoGparFontSizeMatrix",c(list(ncol(matrix)),additionnalColNamesGpar))
+  
+  if(!is.null(sampleAnnot)){
+    args$top_annotation<-genTopAnnot(sampleAnnot,colorAnnot)
+  }
+  
+  args$column_dend_reorder<-column_dend_reorder;args$row_dend_reorder<-row_dend_reorder
+  args$matrix<-matrix
+  args$name=name
+  args$border<-border
+  args<-c(args,list(...))
+  
+  ht<-do.call("Heatmap",args)
+  if(returnHeatmap){
+    return(ht)
+  }else{
+    print(ht)
+  }
+}
+
+```
+
+```{r local functions,include=T, echo=T, warning=F, message=F}
+
+timeNow<-function(x=NULL, y=NULL, m=NULL, d=NULL , h=NULL, min=NULL,ymd_h_m=NULL){x=date();
+date=unlist(str_split(pattern = "-", Sys.Date()))
+time=unlist(str_split(pattern = ":",unlist(str_split(pattern=" ",Sys.time()))[2]))
+return(paste(c(date,time), collapse = "_"))
+}
+
+```
+
+## EPI markers
+
+- Similar expression patterns of these gene categories in the embryo?
+  
+```{r gene_categories_embryo_cpm, out.width="100%", echo=T, message=F, warning=F}
+
+petro_zhou_sample_annot=fastRead("petro_zhou_sample_annot_cell_type_sex.tsv", header=T, sep="\t",as.matrix = F)
+
+# PETRO RAW COUNTS
+load("../../2022_06_20_14_03_petro_total_raw_counts_not_corr.Rdata") #petro_total_raw_counts
+
+# ZHOU RAW COUNTS
+load("../../2022_06_20_14_22_zhou_total_raw_counts_not_corr.Rdata") #zhou_total_raw_counts
+
+# all(rn(assay(petro_total_raw_counts))==rn(assay(zhou_total_raw_counts)))
+petro_zhou_total_raw_counts=cbind(assay(petro_total_raw_counts),assay(zhou_total_raw_counts))
+
+petro_zhou_sample_annot=petro_zhou_sample_annot[rn(petro_zhou_sample_annot)%in%cn(petro_zhou_total_raw_counts),]
+petro_zhou_total_raw_counts=petro_zhou_total_raw_counts[,cn(petro_zhou_total_raw_counts)%in%rn(petro_zhou_sample_annot)]
+petro_zhou_sample_annot=petro_zhou_sample_annot[cn(petro_zhou_total_raw_counts),]
+# all(rn(petro_zhou_sample_annot)==cn(petro_zhou_total_raw_counts))
+
+# subset on female embryos for chrX related questions
+# petro_zhou_total_raw_counts_female=petro_zhou_total_raw_counts[,petro_zhou_sample_annot$sex=='female']
+petro_zhou_sample_annot=petro_zhou_sample_annot[cn(petro_zhou_total_raw_counts),]
+
+petro_zhou_total_raw_counts=as.data.frame(petro_zhou_total_raw_counts)
+petro_zhou_total_raw_counts=petro_zhou_total_raw_counts[rowSums(petro_zhou_total_raw_counts)>100,] #filter genes that are almost not detected
+
+petro_zhou_log_cpm=log2(CPM(petro_zhou_total_raw_counts)+1)
+
+petro_zhou_quantile_norm=preprocessCore::normalize.quantiles(as.matrix(petro_zhou_log_cpm))
+rownames(petro_zhou_quantile_norm)=rn(petro_zhou_log_cpm)
+colnames(petro_zhou_quantile_norm)=cn(petro_zhou_log_cpm)
+
+```
+
+- Extract EPI marker genes in female embryos
+- Analyse expression in stem cells
+
+```{r get markers from  embryo clusters, include=T, echo=T, warning=F, message=F}
+
+variableGenes<-getMostVariableGenes4(2^(petro_zhou_quantile_norm)-1,minCount = 1, returnPlot = F)
+thres<- 0.05
+# qplotDensity(variableGenes$residuals)+geom_vline(xintercept = thres)
+variableGenesNames<-rn(variableGenes)[variableGenes$residuals>thres]
+len(variableGenesNames)
+
+BPPARAM = bpparam()
+register(BPPARAM = BPPARAM)
+registerDoParallel(cores = BPPARAM$workers)
+wd=getwd()
+
+# AUC_clusters_human_embryo<-getMarkers3(as.matrix(petro_zhou_quantile_norm[variableGenesNames,]),paste(sep="_",petro_zhou_sample_annot$finalClusters,petro_zhou_sample_annot$day,petro_zhou_sample_annot$dataset),BPPARAM=BPPARAM)
+# 
+# save(AUC_clusters_human_embryo,file="AUC_clusters_human_embryo.RData")
+
+load("AUC_clusters_human_embryo.RData")
+
+topGeneShown = 30
+
+bestMarkersPerCluster_human_embryo<-VectorListToFactor(lapply(data.frame(AUC_clusters_human_embryo),function(auc){
+  rn(AUC_clusters_human_embryo)[order(auc,decreasing = TRUE)][1:topGeneShown]
+}))
+
+human_marker_list=data.frame(group=bestMarkersPerCluster_human_embryo,
+                             marker_gene=sub("_.*","",names(bestMarkersPerCluster_human_embryo)))
+
+human_marker_list %>%
+  filter(grepl("Eight|Morula|B1_B2_4|B1_B2_5|EPI",group)) -> human_marker_list
+
+# write.tsv(human_marker_list,"human_marker_list.tsv")
+
+
+```
+
+```{r load gtf annotation, echo=T, message=FALSE, warning=FALSE, include=T}
+gtf=read.table("../../Homo_sapiens.GRCh38.90.gtf", header=F, sep="\t")
+colnames(gtf)=c('chrom','source','feature','start',
+                'end',
+                'score',
+                'strand',
+                'frame',
+                'attribute')
+
+gtf=gtf[!grepl('_dup',gtf$attribute),]
+
+gtf %>%
+  filter(chrom=="X" & feature=="gene") -> gtf_chrX_gene
+
+gene_chr=read.table("hg38_gene_chr_list.txt") # homogenize with other scripts, by always using the same gtf
+gene_chr$V2=NULL
+colnames(gene_chr)=c("gene","chr")
+
+```
+
+<!-- LOAD CHARBEL DATA -->
+  
+```{r load charbel data, include=T, echo=T, warning=F, message=F}
+
+# show head table (kable) sample_annot de charbel
+
+raw_count_files=list.files(path = 'raw_counts/',pattern = "_raw_counts.txt")
+sample_annot=fastRead("sample_annot_all.txt", header=T, sep=",",as.matrix = F)
+
+sample_annot=sample_annot[sample_annot$dataset!="rna_seq_d1507",]
+
+sample_annot$sample_id=rn(sample_annot)
+sample_annot$cell_type_condition=paste(sep="_",sample_annot$cell_type,sample_annot$condition)
+
+sample_annot$sample_category=paste(sep="_",sample_annot$cell_type_condition,
+                                   sample_annot$dox_ko,
+                                   sample_annot$dataset)
+
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_control","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_rna","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_treatment","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_seq","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_d1269","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_bis","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_d165","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_d1271","")
+sample_annot$sample_category=str_replace(sample_annot$sample_category,"_dvallot","_vallot")
+
+sample_annot$sample_category=factor(sample_annot$sample_category,
+                                    levels = c("primed_WT",
+                                               "primed_non_eroded_WT_vallot",
+                                               "primed_eroded_WT_vallot",
+                                               "naive_cult_WT",
+                                               "naive_WT",
+                                               "naive_KO",
+                                               "naive_C",
+                                               "naive_T",
+                                               "naive_C_gro",
+                                               "naive_T_gro"))      
+
+sample_annot$group=as.vector(sample_annot$sample_category)
+sample_annot$group[sample_annot$group%in%c("primed_WT","naive_cult_WT")]<-"group1"
+sample_annot$group[sample_annot$group%in%c("primed_non_eroded_WT_vallot","primed_eroded_WT_vallot")]<-"group2"
+sample_annot$group[sample_annot$group%in%c("naive_WT","naive_KO")]<-"group3"
+sample_annot$group[sample_annot$group%in%c("naive_C","naive_T")]<-"group4"
+sample_annot$group[sample_annot$group%in%c("naive_C_gro","naive_T_gro")]<-"group5"
+
+
+mmat=NULL
+
+for (i in seq(length(raw_count_files))){
+  mmat[[i]]=read.table(paste0("raw_counts/",raw_count_files[i]))
+  colnames(mmat[[i]])=c("gene",sub("_.*","",raw_count_files[i]))
+  rownames(mmat[[i]])=mmat[[i]]$gene
+  mmat[[i]]$gene=NULL
+}
+
+mmat_df=do.call("cbind", mmat)
+mmat_df=mmat_df[gene_chr$gene,]
+
+sample_annot_subset=sample_annot[cn(mmat_df),]
+
+mmat_mtx=as.matrix(mmat_df)
+
+mmat_mtx_cpm=CPM(mmat_mtx)
+
+human_stem_cells_quantile_norm=preprocessCore::normalize.quantiles(as.matrix(log2(mmat_mtx_cpm+1)))
+rownames(human_stem_cells_quantile_norm)=rn(mmat_mtx_cpm)
+colnames(human_stem_cells_quantile_norm)=cn(mmat_mtx_cpm)
+
+
+```
+
+```{r}
+
+petro_zhou_quantile_norm=as.data.frame(petro_zhou_quantile_norm)
+petro_zhou_quantile_norm$gene=rn(petro_zhou_quantile_norm)
+
+petro_zhou_quantile_norm %>%
+  pivot_longer(!gene, names_to = "sample", values_to = "norm_count") -> petro_zhou_quantile_norm_longer
+
+petro_zhou_quantile_norm$gene=NULL
+
+# all(petro_zhou_quantile_norm_longer$sample==rn(petro_zhou_sample_annot))
+
+petro_zhou_quantile_norm_longer$Lab=rep(paste(sep="_",petro_zhou_sample_annot$finalClusters,
+                                              petro_zhou_sample_annot$day,
+                                              petro_zhou_sample_annot$dataset),nrow(petro_zhou_quantile_norm))
+
+petro_zhou_quantile_norm_longer %>%
+  group_by(Lab,gene) %>%
+  summarise(mean_norm_count=mean(norm_count)) -> petro_zhou_quantile_norm_longer
+
+petro_zhou_quantile_norm_longer %>%
+  tidyr::pivot_wider(names_from = Lab, values_from = mean_norm_count) %>%
+  as.data.frame() -> petro_zhou_quantile_norm_wider
+
+rownames(petro_zhou_quantile_norm_wider)=petro_zhou_quantile_norm_wider$gene
+petro_zhou_quantile_norm_wider$gene=NULL
+
+
+petro_zhou_quantile_norm_wider_epi=petro_zhou_quantile_norm_wider[,grepl("EPI",cn(petro_zhou_quantile_norm_wider))]
+petro_zhou_quantile_norm_wider_epi=petro_zhou_quantile_norm_wider_epi[,!grepl("EPI_6_zhou",cn(petro_zhou_quantile_norm_wider_epi))]
+
+bestMarkersPerCluster_human_embryo_epi=bestMarkersPerCluster_human_embryo[grepl("EPI",bestMarkersPerCluster_human_embryo)]
+bestMarkersPerCluster_human_embryo_epi=bestMarkersPerCluster_human_embryo_epi[!grepl("EPI_6_zhou",bestMarkersPerCluster_human_embryo_epi)]
+
+petro_zhou_quantile_norm_wider_epi=as.matrix(petro_zhou_quantile_norm_wider_epi)
+
+# BELOW: TO DO
+
+human_stem_cells_quantile_norm_epi_markers=human_stem_cells_quantile_norm[rn(human_stem_cells_quantile_norm)%in%sub("_.*","",names(bestMarkersPerCluster_human_embryo_epi)),]
+
+rownames(petro_zhou_quantile_norm_wider_epi)=sub("_.*","",rn(petro_zhou_quantile_norm_wider_epi))
+petro_zhou_quantile_norm_wider_epi=petro_zhou_quantile_norm_wider_epi[rn(human_stem_cells_quantile_norm_epi_markers),]
+
+# all(rn(petro_zhou_quantile_norm_wider_epi)==rn(human_stem_cells_quantile_norm_epi_markers))
+
+human_stem_cells_quantile_norm_epi_markers=as.data.frame(human_stem_cells_quantile_norm_epi_markers)
+human_stem_cells_quantile_norm_epi_markers$gene=sub("\\..*","",rn(human_stem_cells_quantile_norm_epi_markers))
+
+human_stem_cells_quantile_norm_epi_markers %>%
+  tidyr::pivot_longer(!gene, names_to = "sample", values_to = "norm_count") -> human_stem_cells_quantile_norm_epi_markers_longer
+
+human_stem_cells_quantile_norm_epi_markers_longer %>%
+  group_by(sample,gene) %>%
+  filter(row_number()==1) %>%
+  pivot_wider(names_from = sample, values_from = norm_count) %>%
+  as.data.frame -> human_stem_cells_quantile_norm_epi_markers
+
+rownames(human_stem_cells_quantile_norm_epi_markers)=human_stem_cells_quantile_norm_epi_markers$gene
+human_stem_cells_quantile_norm_epi_markers$gene=NULL
+
+petro_zhou_quantile_norm_wider_epi=as.data.frame(petro_zhou_quantile_norm_wider_epi)
+petro_zhou_quantile_norm_wider_epi$gene=sub("\\..*","",rn(petro_zhou_quantile_norm_wider_epi))
+
+petro_zhou_quantile_norm_wider_epi %>%
+  tidyr::pivot_longer(!gene, names_to = "sample", values_to = "norm_count") -> petro_zhou_quantile_norm_wider_epi_longer
+
+petro_zhou_quantile_norm_wider_epi_longer %>%
+  group_by(sample,gene) %>%
+  filter(row_number()==1) %>%
+  pivot_wider(names_from = sample, values_from = norm_count) %>%
+  as.data.frame -> petro_zhou_quantile_norm_wider_epi
+
+rownames(petro_zhou_quantile_norm_wider_epi)=petro_zhou_quantile_norm_wider_epi$gene
+petro_zhou_quantile_norm_wider_epi$gene=NULL
+
+```
+
+
+```{r, include=F}
+# CAUTION!!! TO BE CHANGE !!!
+
+# all(rn(sample_annot_subset)==cn(human_stem_cells_quantile_norm_epi_markers))
+# all(rn(petro_zhou_quantile_norm_wider_epi)==rn(human_stem_cells_quantile_norm_epi_markers))
+
+human_stem_cells_quantile_norm_epi_markers_subset=human_stem_cells_quantile_norm_epi_markers[,rn(sample_annot_subset)[sample_annot_subset$sample_category%in%c("naive_WT","naive_cult_WT","primed_WT")]]
+
+sample_annot_subset=sample_annot_subset[cn(human_stem_cells_quantile_norm_epi_markers_subset),]
+
+correlation_heatmap_human=heatmap.DM4(cor(rowScale(human_stem_cells_quantile_norm_epi_markers_subset),rowScale(petro_zhou_quantile_norm_wider_epi)),cluster_rows = F,cluster_columns = F, row_split=sample_annot_subset$cell_type_condition,column_split=factor(sub('_[^_]*$', '',cn(petro_zhou_quantile_norm_wider_epi)),levels=c("EPI_5","EPI_6","EPI_7","EPI_8","EPI_10","EPI_12")),show_row_names=T,show_column_names=F, row_title_rot = 0, preSet="correlation", returnHeatmap = F,height = ncol(human_stem_cells_quantile_norm_epi_markers)*unit(10, "mm"),name="Human -\nPearson correlation"
+                                      # , column_split=sample_annot_ht$cell_type
+)
+
+
+
+# pdf(file='/heatmap_naive_cult_wt_epi_clusters.pdf',height = 12,width = 9)
+correlation_heatmap_human
+# dev.off()
+
+```
