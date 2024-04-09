@@ -25,7 +25,8 @@ needed_func=c("BiocManager",
 "sva",
 "gtools",
 "statebins",
-"wesanderson")
+"wesanderson",
+"ComplexHeatmap")
 
 sapply(needed_func,function(x){
     if (x!="BiocManager" & !requireNamespace(x, quietly = T)){

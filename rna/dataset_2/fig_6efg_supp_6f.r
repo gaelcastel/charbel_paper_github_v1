@@ -1,7 +1,7 @@
 # vcf from bcftools already on SNP in H9 CHR X !!!!! BUT CAUTION !!! :not only heterozygous SNP !!! so I applied detect_bi on informative_H9_wgs.vcf
 # Could be relevant to re-run bcftools intersect on this vcf -> bed only informative SNP heterozygous chrX to re-generate samples.vcf
 
-setwd('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/')
+setwd('C:/Users/surfi/Desktop/charbel_paper_2024/2024_04/charbel_paper_github_v1/rna/')
 
 # ex. biallelic: DP4=0,3,2,0 : 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles
 # ex. monoallelic: ; DP4=0,0,1,1: 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles. BUT also DP4=1,1,10,1 (proba/stat)
@@ -34,31 +34,69 @@ library(EnhancedVolcano)
 library(biomaRt)
 library(sva)
 library(gtools)
+library(ComplexHeatmap)
+
+
+# Create tables
+
+# vcf from bcftools already on SNP in H9 CHR X !!!!! BUT CAUTION !!! :not only heterozygous SNP !!! so I applied detect_bi on informative_H9_wgs.vcf
+# Could be relevant to re-run bcftools intersect on this vcf -> bed only informative SNP heterozygous chrX to re-generate samples.vcf
+
+# ex. biallelic: DP4=0,3,2,0 : 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles
+# ex. monoallelic: ; DP4=0,0,1,1: 1) forward ref alleles; 2) reverse ref; 3) forward non-ref; 4) reverse non-ref alleles. BUT also DP4=1,1,10,1 (proba/stat)
+
+# NB: each dataset distinct read length, and some are single-end, so I guess need to determine heterozygous SNPs
+# in primed of each dataset
+
+
+# BiocManager::install("statebins")
+# BiocManager::install("wesanderson")
+library(statebins)
+library(wesanderson)
+library(ggplot2)
+library(stringr)
+library(dplyr)
+library(tidyr)
+library(SingleCellExperiment)
+library(Matrix)
+library(stringr)
+library(BiocManager)
+library(devtools)
+library(pcaMethods)
+library(data.table)
+library(parallel)
+library(DESeq2)
+library(ggpubr)
+library(tidyverse)
+library(EnhancedVolcano)
+library(biomaRt)
+library(sva)
+library(gtools)
 
 open_file <- function(sample){
-    snp <- read.table(paste0("dataset_2/vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chrX.pileup"), header = FALSE,
-                   sep = "\t")
-    colnames(snp) <- c("chrom", "pos", "ref", "dp", "alts", "bq", "mq")
-    return(snp)
+  snp <- read.table(paste0("vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chrX.pileup"), header = FALSE,
+                    sep = "\t")
+  colnames(snp) <- c("chrom", "pos", "ref", "dp", "alts", "bq", "mq")
+  return(snp)
 }
 
 detect_bi <- function(snp){
-    snp=snp[snp$allele_min_num/snp$allele_maj_num >= 1/4,]
-    return(snp)
+  snp=snp[snp$allele_min_num/snp$allele_maj_num >= 1/4,]
+  return(snp)
 }
 
 
 qual_conv <- function(ascii){
   
   return(as.numeric(ascii_qual[ascii,"ASCII"]))
-
+  
 }
 
 
 ascii_qual=read.tsv("ascii_qual.tsv",comment.char = "")
 ascii_qual$symbol=rn(ascii_qual)
 
-gtf=read.table("hg38.gtf", header=F, sep="\t")
+gtf=read.table("../../hg38.gtf", header=F, sep="\t")
 colnames(gtf)=c('chrom','source','feature','start',
                 'end',
                 'score',
@@ -106,7 +144,7 @@ centromeres[["chromosome"]] <- factor(x = centromeres[["chromosome"]],
 # create a color key for the plot
 #group.colors <- c(gain = "red", loss = "blue")
 
-informative_pos_vcf_chrX=read.table('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/H9_WGS_hg38_filtered_chrX.vcf')
+informative_pos_vcf_chrX=read.table('H9_WGS_hg38_filtered_chrX.vcf')
 colnames(informative_pos_vcf_chrX)=c("chrom", "pos", "id", "ref", "alt", "qual", "filter", "info", "format", "sample")
 informative_pos_vcf_chrX=informative_pos_vcf_chrX[grep("0/0|0/1|1/1", informative_pos_vcf_chrX$sample),] #remove alt_2 because very low frequency/probability
 # and annoying for computation
@@ -126,9 +164,10 @@ informative_pos_vcf_chrX$allele_maj_num=apply(informative_pos_vcf_chrX,1,functio
 informative_pos_vcf_chrX$allele_min_num=apply(informative_pos_vcf_chrX,1,function(x){min(as.numeric(x['allele_0']),as.numeric(x['allele_1']))})
 informative_pos_vcf_chrX=detect_bi(informative_pos_vcf_chrX)
 
-sample_annot=read.csv("dataset_2/SampleSheet.csv", header=T, comment.char = '#')
-rownames(sample_annot)=paste0("D1507",sample_annot$Sample_ID)
-sample_annot$sample_id=paste0("D1507",sample_annot$Sample_ID)
+sample_annot=read.csv("sample_annot_all.txt", header=T, comment.char = '#')
+sample_annot=sample_annot[sample_annot$dataset=="rna_seq_d1507",]
+rownames(sample_annot)=sample_annot$Sample_ID
+sample_annot$sample_id=sample_annot$Sample_ID
 sample_annot$group=sub('_[^_]*$', '', sample_annot$Sample_Name)
 sample_annot$group=str_replace_all(sample_annot$group,"CTL","1")
 sample_annot$group=str_replace_all(sample_annot$group,"Mix","2")
@@ -151,152 +190,152 @@ mq_list=NULL
 
 for (sample in rn(sample_annot)){
   
-    sample_list[[sample]]=open_file(sample)
-    # nrow(sample_list[[sample]])==nrow(sample_list[[sample]][sample_list[[sample]]$pos %in% informative_pos_vcf_chrX$pos,]) # TRUE ; no need, because samtools pileup performed on these pos
-    sample_list[[sample]]=sample_list[[sample]][sample_list[[sample]]$dp>=10,]
+  sample_list[[sample]]=open_file(sample)
+  # nrow(sample_list[[sample]])==nrow(sample_list[[sample]][sample_list[[sample]]$pos %in% informative_pos_vcf_chrX$pos,]) # TRUE ; no need, because samtools pileup performed on these pos
+  sample_list[[sample]]=sample_list[[sample]][sample_list[[sample]]$dp>=10,]
+  
+  alts_list=strsplit(sample_list[[sample]]$alts, "")
+  
+  alts_list=lapply(alts_list,function(x){x[!(x%in%c('*','#'))]}) #remove deletions
+  
+  strand_list=lapply(alts_list, function(x){
     
-    alts_list=strsplit(sample_list[[sample]]$alts, "")
+    x[str_detect(x,"[[:upper:]]")]<-"+"
+    x[str_detect(x,"[[:lower:]]")]<-"-"
+    x[x=="."]<-"+"
+    x[x==","]<-"-"
     
-    alts_list=lapply(alts_list,function(x){x[!(x%in%c('*','#'))]}) #remove deletions
+  })
+  
+  for (i in seq(length(alts_list))){
     
-    strand_list=lapply(alts_list, function(x){
+    alts_list[[i]][alts_list[[i]]%in%c(".",",")]<-sample_list[[sample]][i,'ref']
+    
+  }  
+  
+  alts_list=lapply(alts_list,function(x){toupper(x)})
+  
+  alts_list=lapply(alts_list, function(x){
+    
+    if(dim(table(x))>2){x[x%in%(names(table(x)[order(table(x),decreasing = T)][1:2]))]}else{x}
+    
+  }) # remove putative sequencing errors (more than 2 base types detected)
+  
+  sample_list[[sample]]$dp=unlist(lapply(alts_list,function(x){length(x)}))
+  
+  sample_list[[sample]]$allele_maj_num=unlist(lapply(alts_list,function(x){table(x)[order(table(x),decreasing = T)][1]}))
+  sample_list[[sample]]$allele_maj=names(unlist(lapply(alts_list,function(x){table(x)[order(table(x),decreasing = T)][1]})))
+  sample_list[[sample]]$allele_min_num=unlist(lapply(alts_list,function(x){tail(table(x)[table(x)==min(table(x))],n=1)}))
+  sample_list[[sample]]$allele_min=names(unlist(lapply(alts_list,function(x){tail(table(x)[table(x)==min(table(x))],n=1)})))
+  
+  sample_list[[sample]]$ref=toupper(sample_list[[sample]]$ref)
+  
+  informative_pos_vcf_chrX_subset=informative_pos_vcf_chrX[informative_pos_vcf_chrX$pos%in%sample_list[[sample]]$pos,]
+  # informative_pos_vcf_chrX_subset$pos==sample_list[[sample]]$pos
+  # all(informative_pos_vcf_chrX_subset$pos==sample_list[[sample]]$pos) # because ordered
+  
+  # CAUTION: avoid this situation, from putative sequencing error:
+  # "chrom" "pos" "ref" "dp" "alts" "bq" "mq" "allele_maj_num" "allele_maj" "allele_min_num" "allele_min" "allelism"      
+  # chrX 15702622 G 13 ,,,....,,,,., FFFFFkFFFFFFk 51 13 G 0 A mono
+  # chrX 15702622 G 12 ,.,.,t,,,,., FkFFFFFFFFFF 52 11 G 1 T mono
+  # NOT same allele_min. Take the one from the info_chrX that is different from allele_maj
+  
+  for (i in seq(nrow(sample_list[[sample]]))){
+    
+    if(sample_list[[sample]]$allele_min[i]==sample_list[[sample]]$allele_maj[i] |
+       !(sample_list[[sample]]$allele_min[i]%in%c(informative_pos_vcf_chrX_subset$ref[i],
+                                                  informative_pos_vcf_chrX_subset$alt[i]))){
       
-      x[str_detect(x,"[[:upper:]]")]<-"+"
-      x[str_detect(x,"[[:lower:]]")]<-"-"
-      x[x=="."]<-"+"
-      x[x==","]<-"-"
-    
-    })
-
-    for (i in seq(length(alts_list))){
-      
-      alts_list[[i]][alts_list[[i]]%in%c(".",",")]<-sample_list[[sample]][i,'ref']
-      
-    }  
-    
-    alts_list=lapply(alts_list,function(x){toupper(x)})
-    
-    alts_list=lapply(alts_list, function(x){
-      
-      if(dim(table(x))>2){x[x%in%(names(table(x)[order(table(x),decreasing = T)][1:2]))]}else{x}
-      
-      }) # remove putative sequencing errors (more than 2 base types detected)
-        
-    sample_list[[sample]]$dp=unlist(lapply(alts_list,function(x){length(x)}))
-    
-    sample_list[[sample]]$allele_maj_num=unlist(lapply(alts_list,function(x){table(x)[order(table(x),decreasing = T)][1]}))
-    sample_list[[sample]]$allele_maj=names(unlist(lapply(alts_list,function(x){table(x)[order(table(x),decreasing = T)][1]})))
-    sample_list[[sample]]$allele_min_num=unlist(lapply(alts_list,function(x){tail(table(x)[table(x)==min(table(x))],n=1)}))
-    sample_list[[sample]]$allele_min=names(unlist(lapply(alts_list,function(x){tail(table(x)[table(x)==min(table(x))],n=1)})))
-    
-    sample_list[[sample]]$ref=toupper(sample_list[[sample]]$ref)
-    
-    informative_pos_vcf_chrX_subset=informative_pos_vcf_chrX[informative_pos_vcf_chrX$pos%in%sample_list[[sample]]$pos,]
-    # informative_pos_vcf_chrX_subset$pos==sample_list[[sample]]$pos
-    # all(informative_pos_vcf_chrX_subset$pos==sample_list[[sample]]$pos) # because ordered
-    
-    # CAUTION: avoid this situation, from putative sequencing error:
-    # "chrom" "pos" "ref" "dp" "alts" "bq" "mq" "allele_maj_num" "allele_maj" "allele_min_num" "allele_min" "allelism"      
-    # chrX 15702622 G 13 ,,,....,,,,., FFFFFkFFFFFFk 51 13 G 0 A mono
-    # chrX 15702622 G 12 ,.,.,t,,,,., FkFFFFFFFFFF 52 11 G 1 T mono
-    # NOT same allele_min. Take the one from the info_chrX that is different from allele_maj
-    
-    for (i in seq(nrow(sample_list[[sample]]))){
-      
-      if(sample_list[[sample]]$allele_min[i]==sample_list[[sample]]$allele_maj[i] |
-         !(sample_list[[sample]]$allele_min[i]%in%c(informative_pos_vcf_chrX_subset$ref[i],
-                                                    informative_pos_vcf_chrX_subset$alt[i]))){
-        
-        sample_list[[sample]]$allele_min[i]=c(informative_pos_vcf_chrX_subset$ref[i],informative_pos_vcf_chrX_subset$alt[i])[
+      sample_list[[sample]]$allele_min[i]=c(informative_pos_vcf_chrX_subset$ref[i],informative_pos_vcf_chrX_subset$alt[i])[
         c(informative_pos_vcf_chrX_subset$ref[i],informative_pos_vcf_chrX_subset$alt[i])!=sample_list[[sample]]$allele_maj[i]][1]
-        
       
-        sample_list[[sample]]$allele_min_num[i]=0
       
-      }else{
-          
-        sample_list[[sample]]$allele_min[i]=sample_list[[sample]]$allele_min[i]
-        sample_list[[sample]]$allele_min_num[i]=sample_list[[sample]]$allele_min_num[i]
-        
-        }
+      sample_list[[sample]]$allele_min_num[i]=0
+      
+    }else{
+      
+      sample_list[[sample]]$allele_min[i]=sample_list[[sample]]$allele_min[i]
+      sample_list[[sample]]$allele_min_num[i]=sample_list[[sample]]$allele_min_num[i]
       
     }
-
-    mq_list=strsplit(sample_list[[sample]]$mq, "") # convert ascii bq & mq to numeric values, and compute median
-    sample_list[[sample]]$mq=unlist(lapply(mq_list,function(x){median(qual_conv(x),na.rm=T)}))
-    sample_list[[sample]]=sample_list[[sample]][sample_list[[sample]]$mq>=50,]
     
-    sample_list[[sample]]$allelism=rep(NA,nrow(sample_list[[sample]]))
-    sample_list[[sample]]$allelism[sample_list[[sample]]$pos%in%detect_bi(sample_list[[sample]])$pos]<-"bi"
-    sample_list[[sample]]$allelism[!(sample_list[[sample]]$pos%in%detect_bi(sample_list[[sample]])$pos)]<-"mono"
-    
-    sample_list[[sample]]=sample_list[[sample]][nchar(sample_list[[sample]]$allele_min)<2 & nchar(sample_list[[sample]]$allele_maj)<2,] # remove indels positions that were not printed for those reads but yet reported for remaining reads with single base. Induces bias mono
-    # nchar(sample_list[[sample]]$allele_maj)<2 : I think not needed but not a problem.
-    
-    
-    sample_list_bi[[sample]]=sample_list[[sample]][sample_list[[sample]]$allelism=='bi',]
-    
-    sample_list_bi[[sample]][["chrom"]] <- factor(x = sample_list_bi[[sample]][["chrom"]], 
+  }
+  
+  mq_list=strsplit(sample_list[[sample]]$mq, "") # convert ascii bq & mq to numeric values, and compute median
+  sample_list[[sample]]$mq=unlist(lapply(mq_list,function(x){median(qual_conv(x),na.rm=T)}))
+  sample_list[[sample]]=sample_list[[sample]][sample_list[[sample]]$mq>=50,]
+  
+  sample_list[[sample]]$allelism=rep(NA,nrow(sample_list[[sample]]))
+  sample_list[[sample]]$allelism[sample_list[[sample]]$pos%in%detect_bi(sample_list[[sample]])$pos]<-"bi"
+  sample_list[[sample]]$allelism[!(sample_list[[sample]]$pos%in%detect_bi(sample_list[[sample]])$pos)]<-"mono"
+  
+  sample_list[[sample]]=sample_list[[sample]][nchar(sample_list[[sample]]$allele_min)<2 & nchar(sample_list[[sample]]$allele_maj)<2,] # remove indels positions that were not printed for those reads but yet reported for remaining reads with single base. Induces bias mono
+  # nchar(sample_list[[sample]]$allele_maj)<2 : I think not needed but not a problem.
+  
+  
+  sample_list_bi[[sample]]=sample_list[[sample]][sample_list[[sample]]$allelism=='bi',]
+  
+  sample_list_bi[[sample]][["chrom"]] <- factor(x = sample_list_bi[[sample]][["chrom"]], 
+                                                levels = chrom_order)
+  
+  
+  sample_list_mono[[sample]]=sample_list[[sample]][sample_list[[sample]]$allelism=='mono',]
+  # length(sample_list[[sample]]$pos)==length(unique(sample_list[[sample]]$pos)) #TRUE
+  
+  sample_list_mono[[sample]][["chrom"]] <- factor(x = sample_list_mono[[sample]][["chrom"]], 
                                                   levels = chrom_order)
+  
+  df_plot=rbind(sample_list_bi[[sample]],sample_list_mono[[sample]])
+  
+  df_plot_mono=sample_list_mono[[sample]]
+  # df_plot_mono$allelism=rep("mono",nrow(sample_list_mono[[sample]]))
+  
+  df_plot_bi=sample_list_bi[[sample]]
+  # df_plot_bi$allelism=rep("bi",nrow(sample_list_bi[[sample]]))
+  
+  ggplot() + 
+    # base rectangles for the chroms, with numeric value for each chrom on the x-axis
+    statebins:::geom_rrect(data = chrom_sizes, aes(xmin = as.numeric(chromosome) - 0.1, 
+                                                   xmax = as.numeric(chromosome) + 0.1, 
+                                                   ymax = size, ymin = 0), 
+                           colour="black", fill = "white") + 
+    # rotate the plot 90 degrees
+    coord_flip() +
+    # black & white color theme 
+    theme(axis.text.x = element_text(colour = "black"), 
+          panel.grid.major = element_blank(), 
+          panel.grid.minor = element_blank(), 
+          panel.background = element_blank()) + 
+    # give the appearance of a discrete axis with chrom labels
+    scale_x_discrete(name = "chromosome", limits = names(chrom_key)) +
+    # add bands for centromeres
+    geom_rect(data = centromeres, aes(xmin = as.numeric(chromosome) - 0.1, 
+                                      xmax = as.numeric(chromosome) + 0.1, 
+                                      ymax = end, ymin = start)) +
+    # add bands for CNA value
     
+    geom_rect(data = df_plot, aes(xmin = as.numeric(chrom) - 0.097,
+                                  xmax = as.numeric(chrom) + 0.097,
+                                  ymax = pos+150000, ymin = pos-150000, fill=allelism)) +
     
-    sample_list_mono[[sample]]=sample_list[[sample]][sample_list[[sample]]$allelism=='mono',]
-    # length(sample_list[[sample]]$pos)==length(unique(sample_list[[sample]]$pos)) #TRUE
+    geom_rect(data = df_plot_mono, aes(xmin = as.numeric(chrom) - 0.097,
+                                       xmax = as.numeric(chrom) + 0.097,
+                                       ymax = pos+150000, ymin = pos-150000), fill='#3beae4') +
     
-    sample_list_mono[[sample]][["chrom"]] <- factor(x = sample_list_mono[[sample]][["chrom"]], 
-                                                    levels = chrom_order)
-    
-    df_plot=rbind(sample_list_bi[[sample]],sample_list_mono[[sample]])
-
-    df_plot_mono=sample_list_mono[[sample]]
-    # df_plot_mono$allelism=rep("mono",nrow(sample_list_mono[[sample]]))
-    
-    df_plot_bi=sample_list_bi[[sample]]
-    # df_plot_bi$allelism=rep("bi",nrow(sample_list_bi[[sample]]))
-    
-    ggplot() + 
-      # base rectangles for the chroms, with numeric value for each chrom on the x-axis
-      statebins:::geom_rrect(data = chrom_sizes, aes(xmin = as.numeric(chromosome) - 0.1, 
-                                                     xmax = as.numeric(chromosome) + 0.1, 
-                                                     ymax = size, ymin = 0), 
-                             colour="black", fill = "white") + 
-      # rotate the plot 90 degrees
-      coord_flip() +
-      # black & white color theme 
-      theme(axis.text.x = element_text(colour = "black"), 
-            panel.grid.major = element_blank(), 
-            panel.grid.minor = element_blank(), 
-            panel.background = element_blank()) + 
-      # give the appearance of a discrete axis with chrom labels
-      scale_x_discrete(name = "chromosome", limits = names(chrom_key)) +
-      # add bands for centromeres
-      geom_rect(data = centromeres, aes(xmin = as.numeric(chromosome) - 0.1, 
-                                        xmax = as.numeric(chromosome) + 0.1, 
-                                        ymax = end, ymin = start)) +
-      # add bands for CNA value
-      
-      geom_rect(data = df_plot, aes(xmin = as.numeric(chrom) - 0.097,
-                                    xmax = as.numeric(chrom) + 0.097,
-                                    ymax = pos+150000, ymin = pos-150000, fill=allelism)) +
-      
-      geom_rect(data = df_plot_mono, aes(xmin = as.numeric(chrom) - 0.097,
-                                         xmax = as.numeric(chrom) + 0.097,
-                                         ymax = pos+150000, ymin = pos-150000), fill='#3beae4') +
-      
-      geom_rect(data = df_plot_bi, aes(xmin = as.numeric(chrom) - 0.097, 
-                                       xmax = as.numeric(chrom) + 0.097, 
-                                       ymax = pos+150000, ymin = pos-150000), fill='#e75b4e') + 
-      ylab("region (bp)") + 
-      # scale_color_gradient(low="gold", high="red", limits = c(-10,10)) +
-      # scale_fill_gradient(low="gold", high="red", limits = c(-10,10)) +
-      ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"))
-    
-    ggsave(paste0("dataset_2/",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chrX.pdf")))
-
-    
-    # % biallelism chrX primed vs naive
-    percent_biallelism[[sample]]=nrow(df_plot_bi)/(nrow(df_plot_bi)+nrow(df_plot_mono))*100
-    print(sample)
+    geom_rect(data = df_plot_bi, aes(xmin = as.numeric(chrom) - 0.097, 
+                                     xmax = as.numeric(chrom) + 0.097, 
+                                     ymax = pos+150000, ymin = pos-150000), fill='#e75b4e') + 
+    ylab("region (bp)") + 
+    # scale_color_gradient(low="gold", high="red", limits = c(-10,10)) +
+    # scale_fill_gradient(low="gold", high="red", limits = c(-10,10)) +
+    ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"))
+  
+  # ggsave(paste0("",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chrX.pdf")))
+  
+  
+  # % biallelism chrX primed vs naive
+  percent_biallelism[[sample]]=nrow(df_plot_bi)/(nrow(df_plot_bi)+nrow(df_plot_mono))*100
+  print(sample)
 }
 
 
@@ -336,38 +375,38 @@ ggplot(bi_percent_df, aes(x=cell_type_group, y=perbi, fill=cell_type_group)) +
   stat_compare_means(vjust=1,label="p.signif",size=3, method="t.test", paired=FALSE,label.y = 102)+
   ylim(0,100)
 
-# ggsave("dataset_2/spen_all_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup.pdf",width=8,height=8)
+# ggsave("spen_all_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup.pdf",width=8,height=8)
 
 bi_percent_df%>%
   filter(cell_type=="pxgl")%>%
   ggplot(aes(x=cell_type_group, y=perbi, fill=cell_type_group)) +
-    geom_boxplot(lwd=0.15,position=position_dodge(width = 0.8), outlier.stroke = 0, outlier.size = 0)+
-    geom_point(size=0.25,position=position_jitterdodge(jitter.width=0,dodge.width=0.8),alpha=0.8)+
-    # facet_wrap(~genes, scales="free", nrow=6, ncol=3)+
-    theme_bw()+
-    theme(strip.text.x = element_text( face = "bold.italic", size = 10))+
-    scale_x_discrete(expand = c(0, 0.5)) +
-    ylab("% biallelism") +
-    ggtitle("SPEN dataset_2 % biallelism")+
-    # xlab("Cell Type")+
-    geom_blank(aes(y = 0)) + #y_axis start at 0
-    # scale_fill_manual("Cell Type :", values = colors)+
-    guides(fill=guide_legend(ncol=1)) +
-    theme(axis.line.x = element_blank(),
-          axis.line.y = element_blank(),
-          axis.title.x=element_blank(),
-          axis.text.x=element_blank(),
-          axis.ticks.x=element_blank(),
-          panel.grid.major.x = element_blank(),
-          panel.grid.major.y = element_line(size = 0.2, linetype = 'dashed',colour = "grey"),
-          panel.grid.minor.x = element_blank(),
-          panel.grid.minor.y = element_blank())+
-    stat_boxplot(geom='errorbar', linetype=1, width=0.8, size=0.25)+
-    # scale_y_continuous(trans="pseudo_log",breaks =c(0,5,10,50,100), limits=c(0,max(dataDeSeqForPlot$value)+100))+
-    stat_compare_means(vjust=1,label="p.signif",size=3, ref.group = "pxgl_siScr", method="t.test", paired=FALSE,label.y = 100)+
-    ylim(0,100)
+  geom_boxplot(lwd=0.15,position=position_dodge(width = 0.8), outlier.stroke = 0, outlier.size = 0)+
+  geom_point(size=0.25,position=position_jitterdodge(jitter.width=0,dodge.width=0.8),alpha=0.8)+
+  # facet_wrap(~genes, scales="free", nrow=6, ncol=3)+
+  theme_bw()+
+  theme(strip.text.x = element_text( face = "bold.italic", size = 10))+
+  scale_x_discrete(expand = c(0, 0.5)) +
+  ylab("% biallelism") +
+  ggtitle("SPEN dataset_2 % biallelism")+
+  # xlab("Cell Type")+
+  geom_blank(aes(y = 0)) + #y_axis start at 0
+  # scale_fill_manual("Cell Type :", values = colors)+
+  guides(fill=guide_legend(ncol=1)) +
+  theme(axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),
+        panel.grid.major.x = element_blank(),
+        panel.grid.major.y = element_line(size = 0.2, linetype = 'dashed',colour = "grey"),
+        panel.grid.minor.x = element_blank(),
+        panel.grid.minor.y = element_blank())+
+  stat_boxplot(geom='errorbar', linetype=1, width=0.8, size=0.25)+
+  # scale_y_continuous(trans="pseudo_log",breaks =c(0,5,10,50,100), limits=c(0,max(dataDeSeqForPlot$value)+100))+
+  stat_compare_means(vjust=1,label="p.signif",size=3, ref.group = "pxgl_siScr", method="t.test", paired=FALSE,label.y = 100)+
+  ylim(0,100)
 
-ggsave("dataset_2/spen_pxgl_stat_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup.pdf",width=8,height=8)
+# ggsave("spen_pxgl_stat_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup.pdf",width=8,height=8)
 
 
 xa_xi_rep=read.tsv("h9_xa_xi_sequence.tsv")
@@ -402,7 +441,7 @@ for (sample in rn(sample_annot)){
       
     }else{sample_list_filtered[[sample]]$xi_fraction[i]=NA}
   } # allele_min[1] != Xa[i] & != Xi[i]
-
+  
   xi_fraction_list[[sample]]=mean(sample_list_filtered[[sample]]$xi_fraction, na.rm=T)
   
 }
@@ -443,20 +482,20 @@ ggplot(data=df_plot,aes(x=cell_type_group,y=xi_fraction,fill=cell_type_group))+
   ggtitle('SPEN dataset_2 Xi fraction') +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-# ggsave("dataset_2/spen_all_xi_fraction_samtools_pileup.pdf",width=8,height = 8)
+# ggsave("spen_all_xi_fraction_samtools_pileup.pdf",width=8,height = 8)
 
 df_plot %>%
   filter(cell_type=="pxgl") %>%
   ggplot(aes(x=cell_type_group,y=xi_fraction,fill=cell_type_group))+
-    geom_bar(stat = 'summary')+
-    geom_point()+
-    geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position="dodge") +
-    stat_compare_means(ref.group = "pxgl_siScr", vjust=0.2, label="p.signif",size=3, method="t.test", paired=F)  +
-    stat_compare_means(ref.group = "pxgl_siScr", vjust=1, label="p.format",size=3, method="t.test", paired=F)  + 
-    ggtitle('SPEN dataset_2 Xi fraction') +
-    theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+  geom_bar(stat = 'summary')+
+  geom_point()+
+  geom_errorbar(aes(ymin=mean-sd, ymax=mean+sd), position="dodge") +
+  stat_compare_means(ref.group = "pxgl_siScr", vjust=0.2, label="p.signif",size=3, method="t.test", paired=F)  +
+  stat_compare_means(ref.group = "pxgl_siScr", vjust=1, label="p.format",size=3, method="t.test", paired=F)  + 
+  ggtitle('SPEN dataset_2 Xi fraction') +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
 
-# ggsave("dataset_2/spen_pxgl_xi_fraction_samtools_pileup.pdf",width=8,height = 8)
+# ggsave("spen_pxgl_xi_fraction_samtools_pileup.pdf",width=8,height = 8)
 
 
 # charbel_snp_all_rep
@@ -502,114 +541,115 @@ sample_list_gene_fraction$gene_snp=paste(sep = '_',sample_list_gene_fraction$gen
 
 # select genes with SNPs detected in all replicates
 
-sample_list_gene_fraction %>%
-  filter(cell_type_group %in% c("pxgl_siScr","pxgl_siSPEN_2")) %>%
-  group_by(gene_snp) %>%
-  filter(n()>=6) %>%
-  arrange(gene) -> sample_list_snp_all_rep_rna_seq
-
-sample_list_snp_all_rep=sample_list_snp_all_rep_rna_seq # useless
-
-sample_list_snp_all_rep %>%
-  group_by(cell_type_group,gene_snp) %>%
-  summarise(xi_mean_fraction=mean(xi_fraction),group=unique(cell_type_group), snp=unique(pos),dp_mean=round(mean(dp))) %>%
-  as.data.frame()-> sample_list_snp_all_rep_mean
-
-sample_list_snp_all_rep_mean=list(sample_list_snp_all_rep_mean)
-
-xi_fraction_mean=lapply(sample_list_snp_all_rep_mean,function(x){
-  
-  x %>%
+for(condition_group in c("pxgl_siSPEN_1","pxgl_siSPEN_2")){  
+  sample_list_gene_fraction %>%
+    filter(cell_type_group %in% c("pxgl_siScr",condition_group)) %>%
     group_by(gene_snp) %>%
-    filter(n()>1) %>% # filter genes observed in both control and test conditions. Facultative because already filtered above
-    summarise(gene_snp=gene_snp,xi_mean_fraction=xi_mean_fraction,snp=snp,cell_type_group=cell_type_group,dp_mean=dp_mean) %>%
-    ungroup() %>%
-    group_by(cell_type_group, .add = TRUE) %>%
-    group_split() -> xi_fraction_mean_split
+    filter(n()>=6) %>%
+    arrange(gene) -> sample_list_snp_all_rep_rna_seq
   
-  x=do.call('cbind',xi_fraction_mean_split)
-  colnames(x)=c('gene_snp',paste(sep = "_",cn(x)[2:5],unique(x[,4])),paste(sep = "_",cn(x)[6:10],unique(x[,9])))
-  x=x[,c(1,2,5,7,10)]
-  return(x)
-})
-
-names_sample_list_snp_all_rep_mean=lapply(lapply(sample_list_snp_all_rep_mean,function(x){unique(x$cell_type_group)}),function(x){paste(sep="_",x[1],x[2])})
-names(sample_list_snp_all_rep_mean)=unlist(names_sample_list_snp_all_rep_mean)
-names(xi_fraction_mean)=names(sample_list_snp_all_rep_mean)
-
-sample_list_sample_list_snp_all_rep_mean=list(sample_list_snp_all_rep)
-
-xi_pval=lapply(sample_list_sample_list_snp_all_rep_mean,function(x){
+  sample_list_snp_all_rep=sample_list_snp_all_rep_rna_seq # useless
   
-  x %>%
-    group_by(gene_snp) %>%
-    group_split() -> pval_list
+  sample_list_snp_all_rep %>%
+    group_by(cell_type_group,gene_snp) %>%
+    summarise(xi_mean_fraction=mean(xi_fraction),group=unique(cell_type_group), snp=unique(pos),dp_mean=round(mean(dp))) %>%
+    as.data.frame()-> sample_list_snp_all_rep_mean
   
-  names(pval_list)=unlist(lapply(pval_list,function(x){unique(x$gene_snp)}))
+  sample_list_snp_all_rep_mean=list(sample_list_snp_all_rep_mean)
   
-  pval_per_gene_list=unlist(lapply(pval_list,function(x){
+  xi_fraction_mean=lapply(sample_list_snp_all_rep_mean,function(x){
+    
     x %>%
-      compare_means(formula=xi_fraction~cell_type_group,method='t.test') %>%
-      summarise(p=p)
-  }))
+      group_by(gene_snp) %>%
+      filter(n()>1) %>% # filter genes observed in both control and test conditions. Facultative because already filtered above
+      summarise(gene_snp=gene_snp,xi_mean_fraction=xi_mean_fraction,snp=snp,cell_type_group=cell_type_group,dp_mean=dp_mean) %>%
+      ungroup() %>%
+      group_by(cell_type_group, .add = TRUE) %>%
+      group_split() -> xi_fraction_mean_split
+    
+    x=do.call('cbind',xi_fraction_mean_split)
+    colnames(x)=c('gene_snp',paste(sep = "_",cn(x)[2:5],unique(x[,4])),paste(sep = "_",cn(x)[6:10],unique(x[,9])))
+    x=x[,c(1,2,5,7,10)]
+    return(x)
+  })
   
-  sd_per_gene_list_sd1=unlist(lapply(pval_list,function(x){
+  names_sample_list_snp_all_rep_mean=lapply(lapply(sample_list_snp_all_rep_mean,function(x){unique(x$cell_type_group)}),function(x){paste(sep="_",x[1],x[2])})
+  names(sample_list_snp_all_rep_mean)=unlist(names_sample_list_snp_all_rep_mean)
+  names(xi_fraction_mean)=names(sample_list_snp_all_rep_mean)
+  
+  sample_list_sample_list_snp_all_rep_mean=list(sample_list_snp_all_rep)
+  
+  xi_pval=lapply(sample_list_sample_list_snp_all_rep_mean,function(x){
+    
     x %>%
-      group_by(cell_type_group)%>%
-      summarise(sd=sd(xi_fraction)) -> y
+      group_by(gene_snp) %>%
+      group_split() -> pval_list
     
-    sd1=as.numeric(y[1,2])
-    names(sd1)=y[1,1]
+    names(pval_list)=unlist(lapply(pval_list,function(x){unique(x$gene_snp)}))
     
-    return(sd1)
+    pval_per_gene_list=unlist(lapply(pval_list,function(x){
+      x %>%
+        compare_means(formula=xi_fraction~cell_type_group,method='t.test') %>%
+        summarise(p=p)
+    }))
     
-  }))
-  
-  sd_per_gene_list_sd2=unlist(lapply(pval_list,function(x){
-    x %>%
-      group_by(cell_type_group)%>%
-      summarise(sd=sd(xi_fraction)) -> y
+    sd_per_gene_list_sd1=unlist(lapply(pval_list,function(x){
+      x %>%
+        group_by(cell_type_group)%>%
+        summarise(sd=sd(xi_fraction)) -> y
+      
+      sd1=as.numeric(y[1,2])
+      names(sd1)=y[1,1]
+      
+      return(sd1)
+      
+    }))
     
-    sd2=as.numeric(y[2,2])
-    names(sd2)=y[2,1]
+    sd_per_gene_list_sd2=unlist(lapply(pval_list,function(x){
+      x %>%
+        group_by(cell_type_group)%>%
+        summarise(sd=sd(xi_fraction)) -> y
+      
+      sd2=as.numeric(y[2,2])
+      names(sd2)=y[2,1]
+      
+      return(sd2)
+      
+    }))
     
-    return(sd2)
+    #remove genes that were all 0 and thus pval could not be computed
+    names(sd_per_gene_list_sd1)=sub('\\..*','',names(sd_per_gene_list_sd1))
+    names(sd_per_gene_list_sd2)=sub('\\..*','',names(sd_per_gene_list_sd2))
     
-  }))
+    pval_list=pval_list[sub("\\.p.*","",names(pval_per_gene_list))]
+    sd_per_gene_list_sd1=sd_per_gene_list_sd1[sub("\\.p.*","",names(pval_per_gene_list))]
+    sd_per_gene_list_sd2=sd_per_gene_list_sd2[sub("\\.p.*","",names(pval_per_gene_list))]
+    
+    data.frame(row.names =sub("\\.p.*","",names(pval_per_gene_list)),gene_snp=sub("\\.p.*","",names(pval_per_gene_list)),pval=pval_per_gene_list,sd_1=sd_per_gene_list_sd1,sd_2=sd_per_gene_list_sd2)
+    
+  })
   
-  #remove genes that were all 0 and thus pval could not be computed
-  names(sd_per_gene_list_sd1)=sub('\\..*','',names(sd_per_gene_list_sd1))
-  names(sd_per_gene_list_sd2)=sub('\\..*','',names(sd_per_gene_list_sd2))
+  names(sample_list_sample_list_snp_all_rep_mean)=names(xi_fraction_mean)
+  names(xi_pval)=names(sample_list_sample_list_snp_all_rep_mean)
   
-  pval_list=pval_list[sub("\\.p.*","",names(pval_per_gene_list))]
-  sd_per_gene_list_sd1=sd_per_gene_list_sd1[sub("\\.p.*","",names(pval_per_gene_list))]
-  sd_per_gene_list_sd2=sd_per_gene_list_sd2[sub("\\.p.*","",names(pval_per_gene_list))]
+  xi_fraction_mean_pval=NULL
   
-  data.frame(row.names =sub("\\.p.*","",names(pval_per_gene_list)),gene_snp=sub("\\.p.*","",names(pval_per_gene_list)),pval=pval_per_gene_list,sd_1=sd_per_gene_list_sd1,sd_2=sd_per_gene_list_sd2)
-  
-})
-
-names(sample_list_sample_list_snp_all_rep_mean)=names(xi_fraction_mean)
-names(xi_pval)=names(sample_list_sample_list_snp_all_rep_mean)
-
-xi_fraction_mean_pval=NULL
-
-for(name in names(xi_fraction_mean)){
-  
-  df_2_write=merge(xi_fraction_mean[[name]],xi_pval[[name]], by='gene_snp', all=T)
-  df_2_write$gene=sub('_.*','',df_2_write$gene_snp)
-  df_2_write$snp=as.numeric(sub('.*_','',df_2_write$gene_snp))
-  write.tsv(df_2_write[,c(9,10,2:8)],file = paste0("dataset_2/",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd.tsv")))
-  df_2_write=df_2_write[,-c(9,10)]
-  colnames(df_2_write)=c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))
-  xi_fraction_mean_pval[[name]]=df_2_write[,c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))]
-  
-}
+  for(name in names(xi_fraction_mean)){
+    
+    df_2_write=merge(xi_fraction_mean[[name]],xi_pval[[name]], by='gene_snp', all=T)
+    df_2_write$gene=sub('_.*','',df_2_write$gene_snp)
+    df_2_write$snp=as.numeric(sub('.*_','',df_2_write$gene_snp))
+    write.tsv(df_2_write[,c(9,10,2:8)],file = paste0("",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd.tsv")))
+    df_2_write=df_2_write[,-c(9,10)]
+    colnames(df_2_write)=c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))
+    xi_fraction_mean_pval[[name]]=df_2_write[,c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))]
+    
+  }
 
 # xi_fraction_mean_pval %>% reduce(left_join, by = "gene_snp") %>% mutate(gene=sub('_.*','',gene_snp),snp=sub('.*_','',gene_snp)) %>% dplyr::select(-gene_snp) %>% as.data.frame() -> xi_fraction_mean_pval_df
 # xi_fraction_mean_pval_df=xi_fraction_mean_pval_df[,c(29:30,1:28)]
 # write.tsv(xi_fraction_mean_pval_df,file = "xi_fraction_mean_snp_all_25_percent_thres_dp_10_pval_sd.tsv")
-
+# 
 # xi_fraction_mean_pval %>% reduce(left_join, by = "gene_snp") %>% mutate(gene=sub('_.*','',gene_snp),snp=sub('.*_','',gene_snp)) %>% dplyr::select(-gene_snp) %>% as.data.frame() %>% na.omit() -> xi_fraction_mean_pval_df
 # xi_fraction_mean_pval_df=xi_fraction_mean_pval_df[,c(29:30,1:28)]
 # write.tsv(xi_fraction_mean_pval_df,file = "xi_fraction_mean_snp_all_25_percent_thres_dp_10_pval_common_sd.tsv")
@@ -634,11 +674,11 @@ for(name in names(xi_fraction_mean)){
   colnames(df_2)=c('gene_snp','dp','gene','snp')
   df_3=df_1[,c(1,5,9,10)]
   colnames(df_3)=c('gene_snp','dp','gene','snp')
-
+  
   df_2 %>%
     group_by(gene) %>%
     filter(max(dp)/dp<2) -> df_2 # select 'TOP' SNP PER-GENE
- 
+  
   df_3 %>%
     group_by(gene) %>%
     filter(max(dp)/dp<2) -> df_3 # select 'TOP' SNP PER-GENE
@@ -650,17 +690,17 @@ for(name in names(xi_fraction_mean)){
   df_1$feature=apply(df_1,1,function(x){
     
     gtf_x_subset=gtf_x[gtf_x$gene==x['gene'] & gtf_x$feature=='exon',]
-  
+    
     test_exon_intron=data.table::between(as.numeric(x['snp']),as.numeric(gtf_x_subset$start),as.numeric(gtf_x_subset$end))
     
     if(any(test_exon_intron)){return('exon')}else{return('intron')}
-
+    
   })
   
-
+  
   df_2_write=df_1
   
-  write.tsv(df_2_write[,c(9,10,11,2:8)],file = paste0("dataset_2/",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp.tsv")))
+  write.tsv(df_2_write[,c(9,10,11,2:8)],file = paste0("",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp.tsv")))
   df_2_write$gene_snp=paste(sep="_",df_2_write$gene_snp,df_2_write$feature)
   df_2_write=df_2_write[,-c(9,10,11)]
   colnames(df_2_write)=c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))
@@ -711,16 +751,16 @@ for(name in names(xi_fraction_mean)){
   
   df_4=merge(df_2,df_3,by=c('gene'),all=T)
   df_4$pval=as.numeric(apply(df_4,1,function(x){mean(c(as.numeric(x['pval.x']),
-                                                    as.numeric(x['pval.y'])),
-                                                    na.rm=T)}))
-    
+                                                       as.numeric(x['pval.y'])),
+                                                     na.rm=T)}))
+  
   
   df_4$pval.x=NULL
   df_4$pval.y=NULL
   
   df_2_write=df_4[,c(1,2,3,5,6,8,4,7)]
   colnames(df_2_write)=c(cn(xi_fraction_mean[[name]]),'pval','sd1','sd2')
-  write.tsv(df_2_write,file = paste0("dataset_2/",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv")))
+  write.tsv(df_2_write,file = paste0("",paste(sep="_",name,"xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv")))
   colnames(df_2_write)=c(cn(xi_fraction_mean[[name]]),paste0('pval_',name),paste0('sd1_',name),paste0('sd2_',name))
   xi_fraction_mean_pval[[name]]=df_2_write
   
@@ -733,12 +773,12 @@ for(name in names(xi_fraction_mean)){
 # xi_fraction_mean_pval %>% reduce(left_join, by = "gene_snp") %>% mutate(gene=gene_snp) %>% dplyr::select(-gene_snp) %>% as.data.frame() %>% na.omit() -> xi_fraction_mean_pval_df
 # xi_fraction_mean_pval_df=xi_fraction_mean_pval_df[,c(29,1:28)]
 # write.tsv(xi_fraction_mean_pval_df,file = "xi_fraction_mean_snp_all_25_percent_thres_dp_10_pval_common_sd_top_snp_mean_gene.tsv")
-
+}
 
 # CHR7
 
 open_file <- function(sample){
-  snp <- read.table(paste0("dataset_2/vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chr7.pileup"), header = FALSE,
+  snp <- read.table(paste0("vcf/", sample, "_samtools_mpileup_informative_from_wgs_h9_chr7.pileup"), header = FALSE,
                     sep = "\t")
   colnames(snp) <- c("chrom", "pos", "ref", "dp", "alts", "bq", "mq")
   return(snp)
@@ -771,7 +811,7 @@ centromeres[["chromosome"]] <- factor(x = centromeres[["chromosome"]],
 # create a color key for the plot
 #group.colors <- c(gain = "red", loss = "blue")
 
-informative_pos_vcf_chr7=read.table('C:/Users/gael/charbel_paper/rna/charbel_paper_ifb/H9_WGS_hg38_filtered_chr7.vcf')
+informative_pos_vcf_chr7=read.table('H9_WGS_hg38_filtered_chr7.vcf')
 colnames(informative_pos_vcf_chr7)=c("chrom", "pos", "id", "ref", "alt", "qual", "filter", "info", "format", "sample")
 informative_pos_vcf_chr7=informative_pos_vcf_chr7[grep("0/0|0/1|1/1", informative_pos_vcf_chr7$sample),] #remove alt_2 because very low frequency/probability
 # and annoying for computation
@@ -791,9 +831,10 @@ informative_pos_vcf_chr7$allele_maj_num=apply(informative_pos_vcf_chr7,1,functio
 informative_pos_vcf_chr7$allele_min_num=apply(informative_pos_vcf_chr7,1,function(x){min(as.numeric(x['allele_0']),as.numeric(x['allele_1']))})
 informative_pos_vcf_chr7=detect_bi(informative_pos_vcf_chr7)
 
-sample_annot=read.csv("dataset_2/SampleSheet.csv", header=T, comment.char = '#')
-rownames(sample_annot)=paste0("D1507",sample_annot$Sample_ID)
-sample_annot$sample_id=paste0("D1507",sample_annot$Sample_ID)
+sample_annot=read.csv("sample_annot_all.txt", header=T, comment.char = '#')
+sample_annot=sample_annot[sample_annot$dataset=="rna_seq_d1507",]
+rownames(sample_annot)=sample_annot$Sample_ID
+sample_annot$sample_id=sample_annot$Sample_ID
 sample_annot$group=sub('_[^_]*$', '', sample_annot$Sample_Name)
 sample_annot$group=str_replace_all(sample_annot$group,"CTL","1")
 sample_annot$group=str_replace_all(sample_annot$group,"Mix","2")
@@ -801,6 +842,7 @@ sample_annot$replicate=sub('.*_', '', sample_annot$Sample_Name)
 sample_annot$replicate[sample_annot$replicate=="primed"]<-"Rep1"
 sample_annot$cell_type=sub('.*_', '', sample_annot$Sample_Name)
 sample_annot$cell_type[sample_annot$cell_type!="primed"]<-"pxgl"
+
 
 sample_list=NULL
 sample_list_bi=NULL
@@ -956,7 +998,7 @@ for (sample in rn(sample_annot)){
     # scale_fill_gradient(low="gold", high="red", limits = c(-10,10)) +
     ggtitle(paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"))
   
-  ggsave(paste0("dataset_2/",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chr7.pdf")))
+  # ggsave(paste0("",paste(sep="_",paste(sep="_",sample_annot[sample, c("Sample_Name","cell_type")], collapse ="_"),"mono_bi_snp_heterozygous_h9_samtools_pileup_chr7.pdf")))
   
   
   # % biallelism chr7 primed vs naive
@@ -1001,7 +1043,7 @@ ggplot(bi_percent_df, aes(x=cell_type_group, y=perbi, fill=cell_type_group)) +
   stat_compare_means(vjust=1,label="p.signif",size=3, method="t.test", paired=FALSE,label.y = 102)+
   ylim(0,100)
 
-ggsave("dataset_2/spen_all_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup_chr7.pdf",width=8,height=8)
+# ggsave("spen_all_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup_chr7.pdf",width=8,height=8)
 
 bi_percent_df%>%
   filter(cell_type=="pxgl")%>%
@@ -1032,6 +1074,162 @@ bi_percent_df%>%
   stat_compare_means(vjust=1,label="p.signif",size=3, ref.group = "pxgl_siScr", method="t.test", paired=FALSE,label.y = 100)+
   ylim(0,100)
 
-ggsave("dataset_2/spen_pxgl_stat_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup_chr7.pdf",width=8,height=8)
+# ggsave("spen_pxgl_stat_percentage_biallelism_25_percent_thres_dp_10_samtools_mpileup_chr7.pdf",width=8,height=8)
+
+
+# Use tables
+
+bi_bi_up=read.table("bi_bi_up.gtf", header=F, sep="\t")
+colnames(bi_bi_up)=c('chrom','source','feature','start',
+                     'end',
+                     'score',
+                     'strand',
+                     'frame',
+                     'attribute')
+
+mono_bi_up=read.table("mono_bi_up.gtf", header=F, sep="\t")
+colnames(mono_bi_up)=c('chrom','source','feature','start',
+                       'end',
+                       'score',
+                       'strand',
+                       'frame',
+                       'attribute')
+
+bi_bi=read.table("bi_bi.gtf", header=F, sep="\t")
+colnames(bi_bi)=c('chrom','source','feature','start',
+                  'end',
+                  'score',
+                  'strand',
+                  'frame',
+                  'attribute')
+
+up_gtf=rbind(bi_bi_up,
+             mono_bi_up)
+
+constant_gtf=bi_bi # I checked, these genes are common to wt-ko/ctl-ttt, cf file: C:\Users\gael\charbel_paper\rna\charbel_paper_ifb\embryo_pseudobulk\charbel_petro_zhou_v2.r
+
+
+up_gtf%>%
+  filter(feature=="gene")->up_gtf
+
+up_gtf$chrom[up_gtf$chrom=="X"]="chrX"
+up_gtf$category=rep('up',nrow(up_gtf))
+up_gtf$gene=sub('.*gene_name ','',unlist(lapply(str_split(pattern=";",up_gtf$attribute),function(x){x[grep('gene_name',x)]})))
+
+constant_gtf%>%
+  filter(feature=="gene")->constant_gtf
+
+constant_gtf$chrom[constant_gtf$chrom=="X"]="chrX"
+constant_gtf$category=rep('constant',nrow(constant_gtf))
+constant_gtf$gene=sub('.*gene_name ','',unlist(lapply(str_split(pattern=";",constant_gtf$attribute),function(x){x[grep('gene_name',x)]})))
+
+gene_cat=c(up_gtf$gene,constant_gtf$gene)
+gene_category=NULL
+
+for(gene in gene_cat){
+  
+  if(gene %in% up_gtf$gene){gene_category[[gene]]="up"}
+  if(gene %in% constant_gtf$gene){gene_category[[gene]]="constant"}
+  
+}
+
+gene_category=unlist(gene_category)
+# all(names(gene_category)==gene_cat)
+
+gene_cat=data.frame(gene=gene_cat,category=gene_category)
+
+
+spen_ctl_ttt_2_snp=fastRead('pxgl_siScr_pxgl_siSPEN_2_xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv',
+                           header=T, sep="\t",as.matrix = F)
+spen_ctl_ttt_2_snp=spen_ctl_ttt_2_snp[,cn(spen_ctl_ttt_2_snp)[grep('gene|xi_mean_fraction',cn(spen_ctl_ttt_2_snp))]]
+spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siScr[spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siScr==0]<-0.01 
+spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siSPEN_2[spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siSPEN_2==0]<-0.01
+spen_ctl_ttt_2_snp$fc=spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siSPEN_2/spen_ctl_ttt_2_snp$xi_mean_fraction_pxgl_siScr
+
+rownames(spen_ctl_ttt_2_snp)=spen_ctl_ttt_2_snp$gene_snp
+
+gene_cat_spen_2=gene_cat[gene_cat$gene%in%rn(spen_ctl_ttt_2_snp),]
+
+spen_ctl_ttt_2_snp=spen_ctl_ttt_2_snp[gene_cat_spen_2$gene,]
+
+spen_ctl_ttt_2_snp$xist_sensitive_category=gene_cat_spen_2$category
+
+# spen_ctl_ttt_2_snp %>%
+#   write.tsv(.,file="spen_ctl_ttt_2_xist_sensitive_gene_categories.tsv",row.names = F)
+
+# levels(as.factor(spen_ctl_ttt_2_snp$category))
+
+spen_ctl_ttt_1_snp=fastRead('pxgl_siScr_pxgl_siSPEN_1_xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv',
+                            header=T, sep="\t",as.matrix = F)
+spen_ctl_ttt_1_snp=spen_ctl_ttt_1_snp[,cn(spen_ctl_ttt_1_snp)[grep('gene|xi_mean_fraction',cn(spen_ctl_ttt_1_snp))]]
+spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siScr[spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siScr==0]<-0.01 
+spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siSPEN_1[spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siSPEN_1==0]<-0.01
+spen_ctl_ttt_1_snp$fc=spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siSPEN_1/spen_ctl_ttt_1_snp$xi_mean_fraction_pxgl_siScr
+
+rownames(spen_ctl_ttt_1_snp)=spen_ctl_ttt_1_snp$gene_snp
+
+gene_cat_spen_1=gene_cat[gene_cat$gene%in%rn(spen_ctl_ttt_1_snp),]
+
+spen_ctl_ttt_1_snp=spen_ctl_ttt_1_snp[gene_cat_spen_1$gene,]
+
+spen_ctl_ttt_1_snp$xist_sensitive_category=gene_cat_spen_1$category
+
+# spen_ctl_ttt_1_snp %>%
+#   write.tsv(.,file="spen_ctl_ttt_1_xist_sensitive_gene_categories.tsv",row.names = F)
+
+
+# heatmap Xi fraction
+
+naive_ctl_ttt_snp=fastRead('rna_seq_naive_control_rna_seq_naive_treatment_xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv',
+                           header=T, sep="\t",as.matrix = F)
+naive_ctl_ttt_snp=naive_ctl_ttt_snp[,cn(naive_ctl_ttt_snp)[grep('gene|xi_mean_fraction',cn(naive_ctl_ttt_snp))]]
+naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_control[naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_control==0]<-0.01 
+naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_treatment[naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_treatment==0]<-0.01
+naive_ctl_ttt_snp$fc=naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_treatment/naive_ctl_ttt_snp$xi_mean_fraction_rna_seq_naive_control
+
+rownames(naive_ctl_ttt_snp)=naive_ctl_ttt_snp$gene_snp
+gene_cat_spen_1=gene_cat[gene_cat$gene%in%rn(naive_ctl_ttt_snp),]
+naive_ctl_ttt_snp=naive_ctl_ttt_snp[gene_cat_spen_1$gene,]
+naive_ctl_ttt_snp$xist_sensitive_category=gene_cat_spen_1$category
+
+
+naive_wt_ko_snp=fastRead('rna_seq_naive_wt_rna_seq_naive_ko_xi_fraction_mean_snp_25_percent_thres_dp_10_pval_sd_top_snp_mean_gene.tsv',
+                         header=T, sep="\t",as.matrix = F)
+naive_wt_ko_snp=naive_wt_ko_snp[,cn(naive_wt_ko_snp)[grep('gene|xi_mean_fraction',cn(naive_wt_ko_snp))]]
+naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_wt[naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_wt==0]<-0.01 
+naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_ko[naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_ko==0]<-0.01
+naive_wt_ko_snp$fc=naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_ko/naive_wt_ko_snp$xi_mean_fraction_rna_seq_naive_wt
+
+rownames(naive_wt_ko_snp)=naive_wt_ko_snp$gene_snp
+gene_cat_spen_1=gene_cat[gene_cat$gene%in%rn(naive_wt_ko_snp),]
+naive_wt_ko_snp=naive_wt_ko_snp[gene_cat_spen_1$gene,]
+naive_wt_ko_snp$xist_sensitive_category=gene_cat_spen_1$category
+
+
+list(naive_ctl_ttt_snp,naive_wt_ko_snp,spen_ctl_ttt_1_snp,spen_ctl_ttt_2_snp) %>%
+  reduce(merge, by = "gene_snp",all=F) -> xi_fraction_merge
+
+xi_fraction_merge=xi_fraction_merge[,grepl("xi_mean_fraction|xist_sensitive_category.x|gene_snp",cn(xi_fraction_merge))]
+
+rownames(xi_fraction_merge)=xi_fraction_merge$gene_snp
+xi_fraction_merge$gene_snp=NULL
+
+xi_fraction_merge$xi_mean_fraction_pxgl_siScr.y=NULL
+xi_fraction_merge$xist_sensitive_category.x=NULL
+xi_fraction_merge$xist_sensitive_category.x.1=NULL
+
+
+colnames(xi_fraction_merge)=c("naive_ctl","naive_xist_kd","naive_wt","naive_xist_ko","pxgl_siScr","pxgl_siSPEN_1","pxgl_siSPEN_2")
+
+gene_cat_htmp=gene_cat[gene_cat$gene%in%rn(xi_fraction_merge),]
+
+xi_fraction_merge=xi_fraction_merge[gene_cat_htmp$gene,]
+
+# pdf(file = "spen_xi_fraction_heatmap_gene_categories.pdf",width = 8,height = 10)
+
+Heatmap(xi_fraction_merge, cluster_rows = F,cluster_columns = T, split = gene_cat_htmp$category, border = T, name="Xi fraction")
+
+# dev.off()
+
 
 
